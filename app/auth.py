@@ -38,6 +38,14 @@ async def signup(
             pass
 
     if result.session is None:
+        # Supabase는 이메일 열거 공격을 막기 위해 이미 가입된 이메일에도 에러 없이
+        # 응답한다. identities가 비어있으면 신규 가입이 아니라 기존 계정이라는 뜻.
+        if result.user and not result.user.identities:
+            return templates.TemplateResponse(
+                request,
+                "login.html",
+                {"message": "이미 가입된 이메일입니다. 로그인해 주세요."},
+            )
         # 이메일 확인이 필요한 프로젝트 설정인 경우
         return templates.TemplateResponse(
             request,
