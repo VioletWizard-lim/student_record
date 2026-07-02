@@ -32,7 +32,7 @@
     <tbody>
       {% for item in history %}
       <tr>
-        <td class="muted">{{ item.created_at[:16].replace("T", " ") }}</td>
+        <td class="muted">{{ item.created_at | kst }}</td>
         <td>{{ item.student_label }}</td>
         <td><span class="tag">{{ item.category or "-" }}</span></td>
         <td>

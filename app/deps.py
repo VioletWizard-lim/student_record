@@ -4,8 +4,10 @@ from fastapi import HTTPException, Request
 from fastapi.templating import Jinja2Templates
 
 from app.supabase_client import get_user_client
+from app.timeutils import to_kst_display
 
 templates = Jinja2Templates(directory="app/templates")
+templates.env.filters["kst"] = to_kst_display
 
 
 class RedirectException(Exception):

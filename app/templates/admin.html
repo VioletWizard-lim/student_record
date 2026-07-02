@@ -14,7 +14,7 @@
       <tr>
         <td>{{ user.email }}</td>
         <td>{{ user.display_name or "-" }}</td>
-        <td class="muted">{{ user.created_at[:16].replace("T", " ") }}</td>
+        <td class="muted">{{ user.created_at | kst }}</td>
         <td>
           <form method="post" action="/admin/approve/{{ user.id }}" style="display:inline;">
             <button type="submit">승인</button>
