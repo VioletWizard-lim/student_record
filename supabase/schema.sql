@@ -90,6 +90,29 @@ create policy "usage_ledger_no_client_access" on public.usage_ledger
   for all using (false);
 
 -- ---------------------------------------------------------------------------
+-- drafts: 생성 폼의 임시저장 데이터. 사용자당 최대 1건만 보관한다(덮어쓰기).
+-- ---------------------------------------------------------------------------
+create table if not exists public.drafts (
+  user_id uuid primary key references public.profiles (id) on delete cascade,
+  data jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.drafts enable row level security;
+
+create policy "drafts_select_own" on public.drafts
+  for select using (auth.uid() = user_id);
+
+create policy "drafts_insert_own" on public.drafts
+  for insert with check (auth.uid() = user_id);
+
+create policy "drafts_update_own" on public.drafts
+  for update using (auth.uid() = user_id);
+
+create policy "drafts_delete_own" on public.drafts
+  for delete using (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------------
 -- 최초 관리자 지정 (가입 후 1회 수동 실행, README 참고)
 -- ---------------------------------------------------------------------------
 -- update public.profiles set role = 'admin', status = 'approved', approved_at = now()
