@@ -152,6 +152,16 @@ def _parse_students(form: FormData) -> tuple[list[dict], list[dict]]:
         if not activities:
             skipped.append({"label": label, "reason": "활동 관찰 자료가 입력되지 않았습니다."})
             continue
+        criteria = [criterion for criterion, _ in activities]
+        if len(criteria) != len(set(criteria)):
+            skipped.append(
+                {
+                    "label": label,
+                    "reason": "같은 성취기준을 두 개 이상의 활동에 중복 선택했습니다. "
+                    "활동마다 서로 다른 성취기준을 선택해 주세요.",
+                }
+            )
+            continue
         students.append(
             {
                 "student_id": raw["student_id"],
@@ -433,8 +443,6 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
     }
 
     for student in students:
-        criteria = [criterion for criterion, _ in student["activities"]]
-        duplicate_criteria = len(criteria) != len(set(criteria))
         duplicate_student = student["student_id"] in existing_labels
 
         user_prompt = _build_user_prompt(
@@ -449,7 +457,11 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
         try:
             response = anthropic_client.messages.create(
                 model=settings.anthropic_model,
-                max_tokens=4096,
+                # Sonnet 5는 thinking을 명시하지 않으면 기본적으로 적응형 사고가
+                # 켜져 있어, 4096 정도로는 사고 과정만으로 토큰을 다 써버려
+                # 정작 결과 텍스트를 못 받는 경우(stop_reason=max_tokens)가
+                # 있었다. 실제 출력은 짧지만 사고에 여유를 주기 위해 상한을 올린다.
+                max_tokens=16000,
                 system=[
                     {
                         "type": "text",
@@ -519,7 +531,6 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
                 "min_char_limit": min_char_limit,
                 "max_char_limit": max_char_limit,
                 "duplicate_student": duplicate_student,
-                "duplicate_criteria": duplicate_criteria,
             }
         )
 
