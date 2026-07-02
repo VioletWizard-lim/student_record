@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}승인 대기 중 - 생기부 도우미{% endblock %}
+{% block content %}
+<div class="card">
+  {% if profile.status == "rejected" %}
+    <h2>가입이 거절되었습니다</h2>
+    <p class="muted">관리자에 의해 가입 신청이 거절되었습니다. 문의사항이 있으면 관리자에게 연락해 주세요.</p>
+  {% else %}
+    <h2>관리자 승인 대기 중입니다</h2>
+    <p class="muted">
+      로그인은 완료되었지만, 관리자가 신청을 승인해야 생기부 문구 생성 기능을 사용할 수 있습니다.
+      승인 완료 후 이 페이지를 새로고침하면 자동으로 이용할 수 있습니다.
+    </p>
+  {% endif %}
+  <a class="btn" href="/pending">새로고침</a>
+</div>
+{% endblock %}

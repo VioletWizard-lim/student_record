@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}대시보드 - 생기부 도우미{% endblock %}
+{% block content %}
+
+<div class="notice">
+  <strong>개인정보 처리 안내</strong><br />
+  입력 가능 범위: 이름, 학번 등 기본 식별 정보 + 학업/활동 관련 서술 자료만 입력해 주세요.
+  주민등록번호, 가족관계, 건강정보, 심리상담 내용 등 민감정보는 입력하지 않도록 주의해 주세요
+  (주민등록번호 패턴은 자동으로 차단됩니다).
+  입력된 자료는 Anthropic(Claude) API로 전송되어 생기부 문구 생성에만 사용되며, 모델 학습에는 사용되지 않습니다.
+  생성된 문구는 별도 만료 없이 보관되며, 계정 삭제 시 즉시 하드 삭제됩니다.
+</div>
+
+<div class="usage-widget">
+  <div><strong>{{ used }}/{{ limit }}</strong>명 사용</div>
+  <div class="muted">다음 리셋일: D-{{ reset_days }}</div>
+</div>
+
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+<div class="card">
+  <h2>생기부 문구 생성</h2>
+  <form method="post" action="/generate">
+    <label for="student_label">학생 (이름/학번 등)</label>
+    <input type="text" id="student_label" name="student_label" required />
+
+    <label for="category">기재 영역</label>
+    <select id="category" name="category">
+      <option value="">선택 안 함</option>
+      {% for c in categories %}
+      <option value="{{ c }}">{{ c }}</option>
+      {% endfor %}
+    </select>
+
+    <label for="observation">관찰 자료</label>
+    <textarea id="observation" name="observation" required placeholder="학생의 학업/활동 관찰 내용을 서술해 주세요."></textarea>
+
+    <label for="char_limit">글자수 제한 (선택, 공백 포함)</label>
+    <input type="number" id="char_limit" name="char_limit" min="1" />
+
+    <button type="submit" {% if remaining <= 0 %}disabled{% endif %}>생성하기</button>
+  </form>
+</div>
+
+{% if result %}
+<div class="card">
+  <h3>생성 결과</h3>
+  <div class="result-box">{{ result }}</div>
+</div>
+{% endif %}
+
+<div class="card">
+  <h3>최근 생성 이력</h3>
+  {% if history %}
+  <table>
+    <thead>
+      <tr><th>일시</th><th>학생</th><th>영역</th><th>결과</th></tr>
+    </thead>
+    <tbody>
+      {% for item in history %}
+      <tr>
+        <td class="muted">{{ item.created_at[:16].replace("T", " ") }}</td>
+        <td>{{ item.student_label }}</td>
+        <td><span class="tag">{{ item.category or "-" }}</span></td>
+        <td>{{ item.output_text[:60] }}{% if item.output_text|length > 60 %}...{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">아직 생성 이력이 없습니다.</p>
+  {% endif %}
+</div>
+
+<div class="donation">
+  본 서비스는 결제 없이 운영됩니다. 서비스 운영에 도움을 주고 싶으시다면 후원 계좌/QR을 통해 자율적으로 후원하실 수 있습니다 (강제 아님).
+</div>
+
+<div class="card">
+  <h3>계정 삭제</h3>
+  <p class="muted">계정을 삭제하면 생성 이력을 포함한 모든 데이터가 즉시 완전히 삭제되며 복구할 수 없습니다.</p>
+  <form method="post" action="/account/delete" onsubmit="return confirm('정말 계정을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.');">
+    <button type="submit" class="danger">계정 완전 삭제</button>
+  </form>
+</div>
+
+{% endblock %}

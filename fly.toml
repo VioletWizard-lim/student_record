@@ -1,0 +1,27 @@
+# fly.io 설정 - 도쿄(nrt) 리전
+# app 이름은 `fly launch` 시 고유한 이름으로 다시 지정해도 됩니다.
+app = "saenggibu-doumi"
+primary_region = "nrt"
+
+[build]
+
+[env]
+  DEBUG = "false"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/healthz"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
