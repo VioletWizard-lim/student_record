@@ -2,7 +2,8 @@
 {% block title %}생성 이력 - 생기부 도우미{% endblock %}
 {% block content %}
 
-{% macro sort_link(field, label) %}{% set next_order = 'asc' if sort == field and order == 'desc' else 'desc' %}<a href="/history?sort={{ field }}&order={{ next_order }}&q={{ q | urlencode }}">{{ label }}{% if sort == field %} {{ '▾' if order == 'desc' else '▴' }}{% endif %}</a>{% endmacro %}
+{% macro sort_link(field, label) %}{% set next_order = 'asc' if sort == field and order == 'desc' else 'desc' %}<a href="/history?sort={{ field }}&order={{ next_order }}&q={{ q | urlencode }}&subject={{ subject | urlencode }}&page_size={{ page_size }}">{{ label }}{% if sort == field %} {{ '▾' if order == 'desc' else '▴' }}{% endif %}</a>{% endmacro %}
+{% macro page_link(target_page, label) %}<a href="/history?q={{ q | urlencode }}&subject={{ subject | urlencode }}&sort={{ sort }}&order={{ order }}&page_size={{ page_size }}&page={{ target_page }}">{{ label }}</a>{% endmacro %}
 
 <div class="card">
   <h2>생성 이력</h2>
@@ -11,11 +12,28 @@
       <label for="q">검색</label>
       <input type="text" id="q" name="q" value="{{ q }}" placeholder="학번, 영역, 결과 내용 검색" />
     </div>
+    <div class="field field-narrow">
+      <label for="subject">과목</label>
+      <select id="subject" name="subject" onchange="this.form.submit()">
+        <option value="" {% if not subject %}selected{% endif %}>전체 과목</option>
+        {% for s in subjects %}
+        <option value="{{ s }}" {% if s == subject %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field field-narrow">
+      <label for="page_size">페이지당 표시</label>
+      <select id="page_size" name="page_size" onchange="this.form.submit()">
+        {% for size in page_sizes %}
+        <option value="{{ size }}" {% if size == page_size %}selected{% endif %}>{{ size }}명씩 보기</option>
+        {% endfor %}
+      </select>
+    </div>
     <input type="hidden" name="sort" value="{{ sort }}" />
     <input type="hidden" name="order" value="{{ order }}" />
     <div class="field field-narrow">
       <button type="submit">검색</button>
-      {% if q %}<a class="btn" href="/history?sort={{ sort }}&order={{ order }}">초기화</a>{% endif %}
+      {% if q or subject %}<a class="btn" href="/history?sort={{ sort }}&order={{ order }}&page_size={{ page_size }}">초기화</a>{% endif %}
     </div>
   </form>
 
@@ -32,7 +50,7 @@
     <tbody>
       {% for item in history %}
       <tr>
-        <td class="muted">{{ item.created_at[:16].replace("T", " ") }}</td>
+        <td class="muted">{{ item.created_at | kst }}</td>
         <td>{{ item.student_label }}</td>
         <td><span class="tag">{{ item.category or "-" }}</span></td>
         <td>
@@ -45,8 +63,21 @@
       {% endfor %}
     </tbody>
   </table>
-  {% elif q %}
-  <p class="muted">"{{ q }}"에 대한 검색 결과가 없습니다.</p>
+
+  <div class="field-row" style="align-items:center; justify-content:space-between; margin-top:16px;">
+    <span class="muted">총 {{ total }}건 · {{ page }}/{{ total_pages }} 페이지</span>
+    <div>
+      {% if page > 1 %}{{ page_link(page - 1, '이전') }}{% else %}<span class="muted">이전</span>{% endif %}
+      {% for p in range(1, total_pages + 1) %}
+        {% if p >= page - 2 and p <= page + 2 %}
+          {% if p == page %}<strong>{{ p }}</strong>{% else %}{{ page_link(p, p) }}{% endif %}
+        {% endif %}
+      {% endfor %}
+      {% if page < total_pages %}{{ page_link(page + 1, '다음') }}{% else %}<span class="muted">다음</span>{% endif %}
+    </div>
+  </div>
+  {% elif q or subject %}
+  <p class="muted">검색/필터 조건에 맞는 이력이 없습니다.</p>
   {% else %}
   <p class="muted">아직 생성 이력이 없습니다.</p>
   {% endif %}
