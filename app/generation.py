@@ -33,10 +33,10 @@ HISTORY_FETCH_LIMIT = 500
 SYSTEM_PROMPT = """당신은 대한민국 고등학교 교사입니다. 담당 교과목 학생의 교과 세부능력 및 특기사항(세특)을 작성하는 것을 돕는 보조 도구입니다.
 다음 조건을 반드시 지켜 작성하세요.
 1. 문장은 종결형 어미(~함, ~임, ~음 등 명사형 종결)로 끝맺습니다. 개조식이 아닌 서술형 문장으로 씁니다.
-2. 교과 성취 수준을 바탕으로 교과 역량을 강조하고, 학습에 의한 변화와 성장 가능성을 중심으로 기재합니다.
+2. 교과 성취 수준은 문장의 깊이·어조·강조할 역량 수준을 정하는 참고 자료로만 사용합니다. "A 수준", "성취도가 우수함", "높은 성취 수준을 보임"처럼 성취 수준 자체를 문장에 직접 언급하지 않고, 학습 내용과 성장 가능성 서술에 자연스럽게 녹여냅니다.
 3. 제공된 활동 관찰 자료를 근거로 학생의 수행 특기사항을 구체적으로 서술합니다. 근거 없는 내용을 추가하거나 과장하지 않습니다.
 4. 긍정적인 내용만 서술합니다.
-5. 서술 순서는 반드시 "교과 성취 수준 → 수행 특기사항 → 교과 역량 → 수업 태도" 순서를 따릅니다.
+5. 서술 순서는 반드시 "교과 성취 수준에 대한 서술(직접 언급 없이) → 수행 특기사항 → 교과 역량 → 수업 태도" 순서를 따릅니다.
 6. 교사의 관점에서, 학생을 주어로 한 3인칭 시점으로 서술합니다 (1인칭 표현 금지).
 7. 입력된 활동이 여러 개이더라도 활동별로 나누어 쓰지 않고, 이를 모두 종합해 하나의 통일된 문단으로 작성합니다.
 8. 전체 바이트 수(나이스 바이트 계산 기준, 공백 포함)는 사용자가 지정한 최소/최대 바이트 범위를 지켜 작성합니다.
@@ -173,6 +173,20 @@ def _parse_students(form: FormData) -> tuple[list[dict], list[dict]]:
     return students, skipped
 
 
+def _existing_student_labels(current: CurrentUser) -> set[str]:
+    """이 사용자가 이전에 생성한 적 있는 학번 목록을 조회한다. 재생성 시
+    화면(서버/클라이언트 양쪽)에서 "이미 이력이 있는 학번" 경고에 쓰인다."""
+    client = get_user_client(current["access_token"])
+    rows = (
+        client.table("generations")
+        .select("student_label")
+        .eq("user_id", current["user_id"])
+        .execute()
+        .data
+    )
+    return {row["student_label"] for row in rows}
+
+
 def _load_draft(current: CurrentUser) -> dict | None:
     """사용자가 임시저장해 둔 폼 데이터를 불러온다. 저장된 초안이 없거나
     drafts 테이블이 아직 반영되지 않은 환경이면 None을 반환한다."""
@@ -205,6 +219,9 @@ def _dashboard_context(
     subject_criteria_json = json.dumps(
         {subject: get_criteria(subject) for subject in subjects}, ensure_ascii=False
     )
+    existing_student_labels_json = json.dumps(
+        sorted(_existing_student_labels(current)), ensure_ascii=False
+    )
 
     draft = None
     if students is None or min_char_limit is None or max_char_limit is None:
@@ -223,6 +240,7 @@ def _dashboard_context(
         "profile": current["profile"],
         "subjects": subjects,
         "subject_criteria_json": subject_criteria_json,
+        "existing_student_labels_json": existing_student_labels_json,
         "academic_levels": ACADEMIC_ACHIEVEMENT_LEVELS,
         "students": students,
         "next_student_index": next_student_index,
@@ -433,14 +451,7 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
     # 이미 생성 이력이 있는 학번을 다시 생성하면 기존 이력을 덮어쓰지 않고
     # 새 이력으로 추가한다. 대신 결과 화면에서 경고를 표시할 수 있도록,
     # 배치 처리 전 시점의 학번 목록을 미리 조회해 둔다(같은 배치 내 중복 포함).
-    existing_labels = {
-        row["student_label"]
-        for row in client.table("generations")
-        .select("student_label")
-        .eq("user_id", current["user_id"])
-        .execute()
-        .data
-    }
+    existing_labels = _existing_student_labels(current)
 
     for student in students:
         duplicate_student = student["student_id"] in existing_labels
