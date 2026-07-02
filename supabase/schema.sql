@@ -78,8 +78,14 @@ create table if not exists public.usage_ledger (
   email text primary key,
   period_start timestamptz not null default now(),
   generation_count integer not null default 0,
+  -- 관리자가 이 교사에게만 개별로 지정한 30일 주기 사용 한도. null이면 전역
+  -- 기본값(MONTHLY_LIMIT 환경변수)을 따른다.
+  monthly_limit integer,
   updated_at timestamptz not null default now()
 );
+
+-- 기존에 테이블이 이미 있던 배포 환경에서도 안전하게 재실행 가능하도록 추가.
+alter table public.usage_ledger add column if not exists monthly_limit integer;
 
 alter table public.usage_ledger enable row level security;
 

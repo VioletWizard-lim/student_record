@@ -61,7 +61,14 @@ def ledger_status(service_client: Client, email: str) -> dict:
         service_client.table("usage_ledger").update(
             {"period_start": period_start.isoformat(), "generation_count": 0}
         ).eq("email", email).execute()
-    return {"used": used, "period_start": period_start}
+    custom_limit = ledger.get("monthly_limit")
+    monthly_limit = custom_limit if custom_limit is not None else settings.monthly_limit
+    return {
+        "used": used,
+        "period_start": period_start,
+        "monthly_limit": monthly_limit,
+        "custom_limit": custom_limit,
+    }
 
 
 def record_generation(service_client: Client, email: str, used_before: int) -> None:
@@ -71,3 +78,12 @@ def record_generation(service_client: Client, email: str, used_before: int) -> N
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     ).eq("email", email).execute()
+
+
+def set_monthly_limit(service_client: Client, email: str, value: int | None) -> None:
+    """관리자가 특정 교사의 사용 한도를 개별 지정한다.
+
+    value가 None이면 개별 지정을 해제하고 전역 기본값(settings.monthly_limit)을 다시 따른다.
+    """
+    _get_or_create_ledger(service_client, email)
+    service_client.table("usage_ledger").update({"monthly_limit": value}).eq("email", email).execute()
