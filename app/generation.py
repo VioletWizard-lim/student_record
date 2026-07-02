@@ -6,11 +6,10 @@ from starlette.datastructures import FormData
 
 from app.charcount import neis_char_count
 from app.config import settings
-from app.deps import CurrentUser, require_approved
+from app.deps import CurrentUser, require_approved, templates
 from app.pii import SENSITIVE_INFO_NOTICE, contains_rrn
 from app.subject_criteria import criterion_label, get_criteria, get_subjects
 from app.supabase_client import get_service_client, get_user_client
-from app.templating import templates
 from app.usage import days_until_reset, ledger_status, record_generation
 
 router = APIRouter()

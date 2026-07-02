@@ -1,10 +1,8 @@
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from app.deps import CurrentUser, get_current_user
-from app.exceptions import RedirectException
+from app.deps import CurrentUser, RedirectException, get_current_user, templates
 from app.supabase_client import get_anon_client, get_service_client
-from app.templating import templates
 from app.email_domains import is_allowed_education_email
 
 router = APIRouter()
