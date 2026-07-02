@@ -67,7 +67,7 @@
     </div>
     <button type="button" class="row-add" onclick="addActivityRow()">+ 활동 추가</button>
 
-    <p class="muted">전체 활동 결과를 합친 글자수가 {{ char_limit }}자(나이스 글자수 계산 기준)를 넘지 않도록 생성합니다.</p>
+    <p class="muted">입력한 활동을 모두 종합해 하나의 세특 문단(나이스 글자수 계산 기준 {{ min_char_limit }}~{{ max_char_limit }}자)으로 생성합니다.</p>
 
     <button type="submit" {% if not unlimited and remaining <= 0 %}disabled{% endif %}>생성하기</button>
   </form>
@@ -93,14 +93,11 @@
 {% if result %}
 <div class="card">
   <h3>생성 결과</h3>
-  {% if result.over_limit %}
-  <div class="error">합산 글자수 {{ result.total_count }}자로 목표 글자수({{ char_limit }}자)를 초과했습니다. 필요시 내용을 줄여서 다시 생성해 주세요.</div>
+  {% if result.out_of_range %}
+  <div class="error">글자수 {{ result.count }}자로 목표 범위({{ min_char_limit }}~{{ max_char_limit }}자)를 벗어났습니다. 필요시 내용을 조정해 다시 생성해 주세요.</div>
   {% endif %}
-  {% for activity in result.activities %}
-  <h4>활동{{ activity.index }} <span class="tag">{{ activity.count }}자</span></h4>
-  <div class="result-box">{{ activity.text }}</div>
-  {% endfor %}
-  <p class="muted">합산 글자수: <strong>{{ result.total_count }}</strong> / {{ char_limit }}자</p>
+  <div class="result-box">{{ result.text }}</div>
+  <p class="muted">글자수: <strong>{{ result.count }}</strong> / {{ min_char_limit }}~{{ max_char_limit }}자</p>
 </div>
 {% endif %}
 
