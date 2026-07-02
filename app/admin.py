@@ -3,9 +3,8 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 
-from app.deps import CurrentUser, require_admin
+from app.deps import CurrentUser, require_admin, templates
 from app.supabase_client import get_service_client
-from app.templating import templates
 from app.usage import days_until_reset, ledger_status
 from app.config import settings
 

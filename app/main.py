@@ -5,7 +5,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app import admin, auth, generation
 from app.config import settings
-from app.exceptions import RedirectException
+from app.deps import RedirectException
 
 app = FastAPI(title="생기부 도우미")
 
