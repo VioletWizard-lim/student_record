@@ -28,7 +28,8 @@
 <div class="card">
   <h2>생기부 문구 생성</h2>
   <p class="muted">한 번에 최대 {{ max_students_per_batch }}명까지 학생을 추가해서 일괄 생성할 수 있습니다. 작성 중인 내용은 "임시저장"으로 서버에 저장해 뒀다가 나중에 이어서 작성할 수 있습니다.</p>
-  <form method="post" action="/generate">
+  <div id="client-validation-error" class="error" style="display:none;"></div>
+  <form method="post" action="/generate" novalidate>
     <div id="student-blocks">
       {% for student in students %}
       <div class="student-block" data-index="{{ student.index }}">
@@ -233,9 +234,66 @@
     onSubjectChange(block.querySelector('select[name^="subject__"]'));
   });
 
+  function validateStudentsBeforeSubmit() {
+    var issues = [];
+    document.querySelectorAll('.student-block').forEach(function (block) {
+      var studentIdInput = block.querySelector('input[name^="student_id__"]');
+      var subjectSelect = block.querySelector('select[name^="subject__"]');
+      var studentId = studentIdInput.value.trim();
+      var label = studentId || (block.querySelector('.student-block-name').dataset.label);
+
+      var blockIssues = [];
+      if (!studentId) {
+        blockIssues.push('학번이 입력되지 않았습니다.');
+      }
+      if (!subjectSelect.value) {
+        blockIssues.push('과목이 선택되지 않았습니다.');
+      }
+
+      var criteriaSelects = block.querySelectorAll('select[name^="activity_criterion__"]');
+      var textAreas = block.querySelectorAll('textarea[name^="activity_text__"]');
+      var filledCriteria = [];
+      criteriaSelects.forEach(function (sel, i) {
+        var text = textAreas[i] ? textAreas[i].value.trim() : '';
+        if (text) filledCriteria.push(sel.value);
+      });
+      if (filledCriteria.length === 0) {
+        blockIssues.push('활동 관찰 자료가 입력되지 않았습니다.');
+      } else if (new Set(filledCriteria).size !== filledCriteria.length) {
+        blockIssues.push('같은 성취기준을 두 개 이상의 활동에 중복 선택했습니다.');
+      }
+
+      if (blockIssues.length > 0) {
+        // 문제가 있는 학생 블록은 접혀 있어도 눈에 보이도록 펼친다.
+        if (block.classList.contains('collapsed')) {
+          block.classList.remove('collapsed');
+          var toggleBtn = block.querySelector('.student-block-title button.row-remove:not(.danger)');
+          if (toggleBtn) toggleBtn.textContent = '접기';
+        }
+        issues.push(label + ': ' + blockIssues.join(' '));
+      }
+    });
+    return issues;
+  }
+
   document.querySelector('form[action="/generate"]').addEventListener('submit', function (e) {
-    // 임시저장 버튼으로 제출된 경우에는 "생성 중" 표시를 하지 않는다.
-    if (e.submitter && e.submitter.getAttribute('formaction') === '/draft/save') return;
+    var errorBox = document.getElementById('client-validation-error');
+    // 임시저장 버튼으로 제출된 경우에는 검증/"생성 중" 표시를 하지 않는다.
+    if (e.submitter && e.submitter.getAttribute('formaction') === '/draft/save') {
+      errorBox.style.display = 'none';
+      return;
+    }
+
+    var issues = validateStudentsBeforeSubmit();
+    if (issues.length > 0) {
+      e.preventDefault();
+      errorBox.textContent = '다음 학생 정보를 확인해 주세요. (' + issues.join(' / ') + ')';
+      errorBox.style.display = 'block';
+      errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    errorBox.style.display = 'none';
+
     var btn = document.getElementById('generate-submit-btn');
     if (!btn || btn.disabled) return;
     btn.disabled = true;
