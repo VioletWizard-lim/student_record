@@ -8,7 +8,7 @@
     입력하신 자료는 Anthropic(Claude) API로 전송되며, 모델 학습에는 사용되지 않습니다.
   </div>
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
-  <form method="post" action="/signup">
+  <form method="post" action="/signup" onsubmit="this.querySelector('button[type=submit]').disabled = true;">
     <label for="display_name">이름(표시용, 선택)</label>
     <input type="text" id="display_name" name="display_name" />
     <label for="email">이메일</label>
@@ -17,6 +17,12 @@
     <input type="password" id="password" name="password" required minlength="6" />
     <button type="submit">가입 신청</button>
   </form>
+  <p class="muted" id="signup-hint" style="display:none;">요청을 처리하는 중입니다. 화면이 바뀔 때까지 다시 누르지 말고 기다려 주세요.</p>
+  <script>
+    document.querySelector('form[action="/signup"]').addEventListener('submit', function () {
+      document.getElementById('signup-hint').style.display = 'block';
+    });
+  </script>
   <p class="muted" style="margin-top:16px;">
     이미 계정이 있으신가요? <a href="/login">로그인</a>
   </p>
