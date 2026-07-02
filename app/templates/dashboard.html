@@ -26,46 +26,54 @@
 
 <div class="card">
   <h2>생기부 문구 생성</h2>
+  <p class="muted">한 번에 최대 {{ max_students_per_batch }}명까지 학생을 추가해서 일괄 생성할 수 있습니다.</p>
   <form method="post" action="/generate">
-    <label for="student_id">학번</label>
-    <input type="text" id="student_id" name="student_id" required style="max-width:220px;" />
+    <div id="student-blocks">
+      <div class="student-block" data-index="0">
+        <h3 class="student-block-title">학생 1 <button type="button" class="danger row-remove" onclick="removeStudentBlock(this)">삭제</button></h3>
 
-    <label for="subject">과목</label>
-    <select id="subject" name="subject" required style="max-width:220px;" onchange="onSubjectChange()">
-      {% for s in subjects %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
-    </select>
+        <label>학번</label>
+        <input type="text" name="student_id__0" required style="max-width:220px;" />
 
-    <label for="academic_achievement">학업 성취도</label>
-    <select id="academic_achievement" name="academic_achievement" style="max-width:220px;">
-      <option value="">선택 안 함</option>
-      {% for level in academic_levels %}<option value="{{ level }}">{{ level }}</option>{% endfor %}
-    </select>
+        <label>과목</label>
+        <select name="subject__0" required style="max-width:220px;" onchange="onSubjectChange(this)">
+          {% for s in subjects %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+        </select>
 
-    <label>활동별 성취기준 및 관찰 자료</label>
-    <div style="overflow-x:auto;">
-      <table class="input-table" id="activity-table">
-        <thead>
-          <tr>
-            <th style="width:160px;">성취기준</th>
-            <th>관찰 자료</th>
-            <th style="width:70px;"></th>
-          </tr>
-        </thead>
-        <tbody id="activity-rows">
-          <tr>
-            <td><select name="activity_criterion" required></select></td>
-            <td><textarea name="activity_text" required placeholder="활동 관찰 자료"></textarea></td>
-            <td><button type="button" class="danger row-remove" onclick="removeActivityRow(this)">삭제</button></td>
-          </tr>
-          <tr>
-            <td><select name="activity_criterion" required></select></td>
-            <td><textarea name="activity_text" required placeholder="활동 관찰 자료"></textarea></td>
-            <td><button type="button" class="danger row-remove" onclick="removeActivityRow(this)">삭제</button></td>
-          </tr>
-        </tbody>
-      </table>
+        <label>학업 성취도</label>
+        <select name="academic_achievement__0" style="max-width:220px;">
+          <option value="">선택 안 함</option>
+          {% for level in academic_levels %}<option value="{{ level }}">{{ level }}</option>{% endfor %}
+        </select>
+
+        <label>활동별 성취기준 및 관찰 자료</label>
+        <div style="overflow-x:auto;">
+          <table class="input-table">
+            <thead>
+              <tr>
+                <th style="width:160px;">성취기준</th>
+                <th>관찰 자료</th>
+                <th style="width:70px;"></th>
+              </tr>
+            </thead>
+            <tbody class="activity-rows">
+              <tr>
+                <td><select name="activity_criterion__0" required></select></td>
+                <td><textarea name="activity_text__0" required placeholder="활동 관찰 자료"></textarea></td>
+                <td><button type="button" class="danger row-remove" onclick="removeActivityRow(this)">삭제</button></td>
+              </tr>
+              <tr>
+                <td><select name="activity_criterion__0" required></select></td>
+                <td><textarea name="activity_text__0" required placeholder="활동 관찰 자료"></textarea></td>
+                <td><button type="button" class="danger row-remove" onclick="removeActivityRow(this)">삭제</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <button type="button" class="row-add" onclick="addActivityRow(this)">+ 활동 추가</button>
+      </div>
     </div>
-    <button type="button" class="row-add" onclick="addActivityRow()">+ 활동 추가</button>
+    <button type="button" class="row-add" onclick="addStudentBlock()">+ 학생 추가</button>
 
     <label for="min_char_limit">목표 글자수 (최소)</label>
     <input type="number" id="min_char_limit" name="min_char_limit" min="1" max="{{ hard_max_char_limit }}" value="{{ default_min_char_limit }}" style="max-width:150px;" />
@@ -73,14 +81,15 @@
     <label for="max_char_limit">목표 글자수 (최대, 최대 {{ hard_max_char_limit }}자)</label>
     <input type="number" id="max_char_limit" name="max_char_limit" min="1" max="{{ hard_max_char_limit }}" value="{{ default_max_char_limit }}" style="max-width:150px;" />
 
-    <p class="muted">입력한 활동을 모두 종합해 하나의 세특 문단(나이스 글자수 계산 기준)으로 생성합니다. 최대 글자수는 {{ hard_max_char_limit }}자를 넘을 수 없습니다.</p>
+    <p class="muted">학생별로 입력한 활동을 모두 종합해 하나의 세특 문단(나이스 글자수 계산 기준)으로 생성합니다. 목표 글자수는 이번에 생성하는 모든 학생에게 동일하게 적용되며, 최대 글자수는 {{ hard_max_char_limit }}자를 넘을 수 없습니다.</p>
 
-    <button type="submit" {% if not unlimited and remaining <= 0 %}disabled{% endif %}>생성하기</button>
+    <button type="submit" {% if not unlimited and remaining <= 0 %}disabled{% endif %}>일괄 생성하기</button>
   </form>
 </div>
 
 <script>
   var SUBJECT_CRITERIA = {{ subject_criteria_json | safe }};
+  var nextStudentIndex = 1;
 
   function populateCriteriaSelect(select, subject) {
     var options = SUBJECT_CRITERIA[subject] || [];
@@ -89,7 +98,7 @@
     options.forEach(function (pair) {
       var opt = document.createElement('option');
       opt.value = pair[0];
-      opt.textContent = pair[0] + ' - ' + pair[1];
+      opt.textContent = pair[0];
       select.appendChild(opt);
     });
     if (options.some(function (pair) { return pair[0] === previousValue; })) {
@@ -97,42 +106,93 @@
     }
   }
 
-  function onSubjectChange() {
-    var subject = document.getElementById('subject').value;
-    document.querySelectorAll('select[name="activity_criterion"]').forEach(function (select) {
-      populateCriteriaSelect(select, subject);
+  function onSubjectChange(select) {
+    var block = select.closest('.student-block');
+    block.querySelectorAll('select[name^="activity_criterion__"]').forEach(function (sel) {
+      populateCriteriaSelect(sel, select.value);
     });
   }
 
-  function addActivityRow() {
-    var tbody = document.getElementById('activity-rows');
+  function addActivityRow(button) {
+    var block = button.closest('.student-block');
+    var tbody = block.querySelector('.activity-rows');
     var rows = tbody.querySelectorAll('tr');
     var clone = rows[0].cloneNode(true);
     clone.querySelectorAll('textarea').forEach(function (t) { t.value = ''; });
     tbody.appendChild(clone);
-    populateCriteriaSelect(
-      clone.querySelector('select[name="activity_criterion"]'),
-      document.getElementById('subject').value
-    );
+    var subjectSelect = block.querySelector('select[name^="subject__"]');
+    populateCriteriaSelect(clone.querySelector('select[name^="activity_criterion__"]'), subjectSelect.value);
   }
+
   function removeActivityRow(button) {
-    var tbody = document.getElementById('activity-rows');
+    var block = button.closest('.student-block');
+    var tbody = block.querySelector('.activity-rows');
     if (tbody.querySelectorAll('tr').length > 1) {
       button.closest('tr').remove();
     }
   }
 
-  onSubjectChange();
+  function addStudentBlock() {
+    var container = document.getElementById('student-blocks');
+    var blocks = container.querySelectorAll('.student-block');
+    if (blocks.length >= {{ max_students_per_batch }}) {
+      alert('한 번에 최대 {{ max_students_per_batch }}명까지 추가할 수 있습니다.');
+      return;
+    }
+    var template = blocks[0];
+    var oldIndex = template.getAttribute('data-index');
+    var newIndex = nextStudentIndex++;
+    var clone = template.cloneNode(true);
+    clone.setAttribute('data-index', newIndex);
+    clone.querySelectorAll('[name]').forEach(function (el) {
+      el.name = el.name.slice(0, el.name.lastIndexOf('__')) + '__' + newIndex;
+    });
+    clone.querySelectorAll('input[type=text], textarea').forEach(function (el) { el.value = ''; });
+    clone.querySelectorAll('select').forEach(function (el) { el.selectedIndex = 0; });
+    container.appendChild(clone);
+    onSubjectChange(clone.querySelector('select[name^="subject__"]'));
+    updateStudentHeadings();
+  }
+
+  function removeStudentBlock(button) {
+    var container = document.getElementById('student-blocks');
+    if (container.querySelectorAll('.student-block').length > 1) {
+      button.closest('.student-block').remove();
+      updateStudentHeadings();
+    }
+  }
+
+  function updateStudentHeadings() {
+    document.querySelectorAll('.student-block').forEach(function (block, i) {
+      var title = block.querySelector('.student-block-title');
+      var removeBtn = title.querySelector('button');
+      title.firstChild.textContent = '학생 ' + (i + 1) + ' ';
+      title.appendChild(removeBtn);
+    });
+  }
+
+  document.querySelectorAll('.student-block').forEach(function (block) {
+    onSubjectChange(block.querySelector('select[name^="subject__"]'));
+  });
 </script>
 
 {% if result %}
 <div class="card">
   <h3>생성 결과</h3>
-  {% if result.out_of_range %}
-  <div class="error">글자수 {{ result.count }}자로 목표 범위({{ result.min_char_limit }}~{{ result.max_char_limit }}자)를 벗어났습니다. 필요시 내용을 조정해 다시 생성해 주세요.</div>
-  {% endif %}
-  <div class="result-box">{{ result.text }}</div>
-  <p class="muted">글자수: <strong>{{ result.count }}</strong> / {{ result.min_char_limit }}~{{ result.max_char_limit }}자</p>
+  {% for item in result %}
+  <div class="result-item">
+    <h4>{{ item.student_id }}</h4>
+    {% if item.error %}
+    <div class="error">{{ item.error }}</div>
+    {% else %}
+    {% if item.out_of_range %}
+    <div class="error">글자수 {{ item.count }}자로 목표 범위({{ item.min_char_limit }}~{{ item.max_char_limit }}자)를 벗어났습니다. 필요시 내용을 조정해 다시 생성해 주세요.</div>
+    {% endif %}
+    <div class="result-box">{{ item.text }}</div>
+    <p class="muted">글자수: <strong>{{ item.count }}</strong> / {{ item.min_char_limit }}~{{ item.max_char_limit }}자</p>
+    {% endif %}
+  </div>
+  {% endfor %}
 </div>
 {% endif %}
 
