@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}관리자 - 생기부 도우미{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2>승인 대기열</h2>
+  {% if pending %}
+  <table>
+    <thead>
+      <tr><th>이메일</th><th>이름</th><th>가입일</th><th>처리</th></tr>
+    </thead>
+    <tbody>
+      {% for user in pending %}
+      <tr>
+        <td>{{ user.email }}</td>
+        <td>{{ user.display_name or "-" }}</td>
+        <td class="muted">{{ user.created_at[:16].replace("T", " ") }}</td>
+        <td>
+          <form method="post" action="/admin/approve/{{ user.id }}" style="display:inline;">
+            <button type="submit">승인</button>
+          </form>
+          <form method="post" action="/admin/reject/{{ user.id }}" style="display:inline;">
+            <button type="submit" class="danger">거절</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">승인 대기 중인 사용자가 없습니다.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>사용자별 사용량</h2>
+  <table>
+    <thead>
+      <tr><th>이메일</th><th>상태</th><th>사용량</th><th>잔여</th><th>리셋</th></tr>
+    </thead>
+    <tbody>
+      {% for row in usage_rows %}
+      <tr>
+        <td>{{ row.profile.email }}</td>
+        <td><span class="tag">{{ row.profile.status }}</span></td>
+        <td>{{ row.used }}/{{ row.limit }}</td>
+        <td>{{ row.remaining }}</td>
+        <td>D-{{ row.reset_days }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

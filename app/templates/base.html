@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}생기부 도우미{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a href="/">생기부 도우미</a>
+    <nav>
+      {% if profile %}
+        <span class="muted">{{ profile.display_name or profile.email }}</span>
+        {% if profile.role == "admin" %}
+          <a href="/admin">관리자</a>
+        {% endif %}
+        <a href="/logout">로그아웃</a>
+      {% else %}
+        <a href="/login">로그인</a>
+        <a href="/signup">회원가입</a>
+      {% endif %}
+    </nav>
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
