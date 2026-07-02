@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}계정 삭제 - 생기부 도우미{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2>계정 삭제</h2>
+  <p class="muted">계정을 삭제하면 생성 이력을 포함한 모든 데이터가 즉시 완전히 삭제되며 복구할 수 없습니다.
+  단, 같은 이메일의 사용 건수/주기 기록(실제 내용 미포함)은 한도 우회 방지를 위해 남습니다.</p>
+  <form method="post" action="/account/delete" onsubmit="return confirm('정말 계정을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.');">
+    <button type="submit" class="danger">계정 완전 삭제</button>
+  </form>
+</div>
+
+{% endblock %}

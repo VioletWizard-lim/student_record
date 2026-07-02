@@ -172,21 +172,12 @@ def _dashboard_context(
     min_char_limit: int | str | None = None,
     max_char_limit: int | str | None = None,
 ) -> dict:
-    client = get_user_client(current["access_token"])
     unlimited = _is_unlimited(current["profile"])
     status = ledger_status(get_service_client(), current["profile"]["email"])
     used = status["used"]
-    remaining = None if unlimited else max(settings.monthly_limit - used, 0)
+    limit = status["monthly_limit"]
+    remaining = None if unlimited else max(limit - used, 0)
     reset_days = days_until_reset(status["period_start"])
-    history = (
-        client.table("generations")
-        .select("*")
-        .eq("user_id", current["user_id"])
-        .order("created_at", desc=True)
-        .limit(20)
-        .execute()
-        .data
-    )
     subjects = get_subjects()
     subject_criteria_json = json.dumps(
         {subject: get_criteria(subject) for subject in subjects}, ensure_ascii=False
@@ -217,15 +208,15 @@ def _dashboard_context(
         "hard_max_char_limit": HARD_MAX_CHAR_LIMIT,
         "max_students_per_batch": MAX_STUDENTS_PER_BATCH,
         "used": used,
-        "limit": settings.monthly_limit,
+        "limit": limit,
         "unlimited": unlimited,
         "remaining": remaining,
         "reset_days": reset_days,
-        "history": history,
         "sensitive_info_notice": SENSITIVE_INFO_NOTICE,
         "error": error,
         "notice": notice,
         "result": result,
+        "active_nav": "dashboard",
     }
 
 
@@ -233,6 +224,25 @@ def _dashboard_context(
 async def dashboard(request: Request, current: CurrentUser = Depends(require_approved)):
     context = _dashboard_context(current)
     return templates.TemplateResponse(request, "dashboard.html", context)
+
+
+@router.get("/history")
+async def history_page(request: Request, current: CurrentUser = Depends(require_approved)):
+    client = get_user_client(current["access_token"])
+    history = (
+        client.table("generations")
+        .select("*")
+        .eq("user_id", current["user_id"])
+        .order("created_at", desc=True)
+        .limit(50)
+        .execute()
+        .data
+    )
+    return templates.TemplateResponse(
+        request,
+        "history.html",
+        {"profile": current["profile"], "history": history, "active_nav": "history"},
+    )
 
 
 @router.post("/draft/save")
@@ -297,13 +307,14 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
     service_client = get_service_client()
     status = ledger_status(service_client, current["profile"]["email"])
     used = status["used"]
+    limit = status["monthly_limit"]
     unlimited = _is_unlimited(current["profile"])
 
-    if not unlimited and used + len(students) > settings.monthly_limit:
+    if not unlimited and used + len(students) > limit:
         context = _dashboard_context(
             current,
-            error=f"이번 요청(학생 {len(students)}명)을 처리하면 사용 한도({settings.monthly_limit}건)를 "
-            f"초과합니다. 남은 한도는 {max(settings.monthly_limit - used, 0)}건입니다. "
+            error=f"이번 요청(학생 {len(students)}명)을 처리하면 사용 한도({limit}건)를 "
+            f"초과합니다. 남은 한도는 {max(limit - used, 0)}건입니다. "
             "학생 수를 줄이거나 다음 리셋일까지 기다려 주세요.",
             students=raw_students,
             min_char_limit=min_char_limit,

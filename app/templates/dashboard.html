@@ -241,47 +241,8 @@
 </div>
 {% endif %}
 
-<div class="card">
-  <h3>최근 생성 이력</h3>
-  {% if history %}
-  <table>
-    <thead>
-      <tr><th>일시</th><th>학번</th><th>영역</th><th>결과</th></tr>
-    </thead>
-    <tbody>
-      {% for item in history %}
-      <tr>
-        <td class="muted">{{ item.created_at[:16].replace("T", " ") }}</td>
-        <td>{{ item.student_label }}</td>
-        <td><span class="tag">{{ item.category or "-" }}</span></td>
-        <td>
-          <details class="history-result">
-            <summary>{{ item.output_text[:60] }}{% if item.output_text|length > 60 %}...{% endif %}</summary>
-            <div class="result-box">{{ item.output_text }}</div>
-          </details>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="muted">아직 생성 이력이 없습니다.</p>
-  {% endif %}
-</div>
-
 <div class="donation">
   본 서비스는 결제 없이 운영됩니다.
 </div>
-
-{% if profile.role != "admin" %}
-<div class="card">
-  <h3>계정 삭제</h3>
-  <p class="muted">계정을 삭제하면 생성 이력을 포함한 모든 데이터가 즉시 완전히 삭제되며 복구할 수 없습니다.
-  단, 같은 이메일의 사용 건수/주기 기록(실제 내용 미포함)은 한도 우회 방지를 위해 남습니다.</p>
-  <form method="post" action="/account/delete" onsubmit="return confirm('정말 계정을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.');">
-    <button type="submit" class="danger">계정 완전 삭제</button>
-  </form>
-</div>
-{% endif %}
 
 {% endblock %}

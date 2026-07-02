@@ -102,6 +102,15 @@ async def pending_page(request: Request, current: CurrentUser = Depends(get_curr
     return templates.TemplateResponse(request, "pending.html", {"profile": current["profile"]})
 
 
+@router.get("/account")
+async def account_page(request: Request, current: CurrentUser = Depends(get_current_user)):
+    if current["profile"]["role"] == "admin":
+        return RedirectResponse("/dashboard", status_code=303)
+    return templates.TemplateResponse(
+        request, "account.html", {"profile": current["profile"], "active_nav": "account"}
+    )
+
+
 @router.post("/account/delete")
 async def delete_account(request: Request, current: CurrentUser = Depends(get_current_user)):
     """사용자 본인 요청에 의한 즉시 하드 삭제 (복구 불가). 관리자 계정은 삭제할 수 없다."""
