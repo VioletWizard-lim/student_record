@@ -113,6 +113,7 @@
 
 <script>
   var SUBJECT_CRITERIA = {{ subject_criteria_json | safe }};
+  var EXISTING_STUDENT_LABELS = {{ existing_student_labels_json | safe }};
   var nextStudentIndex = {{ next_student_index }};
 
   function populateCriteriaSelect(select, subject) {
@@ -276,6 +277,23 @@
     return issues;
   }
 
+  function findDuplicateStudentLabels() {
+    // 서버에 이미 이력이 있는 학번뿐 아니라, 같은 배치 안에서 학번이
+    // 두 번 이상 쓰인 경우도 함께 잡아낸다(서버 처리 순서와 동일한 방식).
+    var seen = new Set(EXISTING_STUDENT_LABELS);
+    var duplicates = [];
+    document.querySelectorAll('.student-block').forEach(function (block) {
+      var studentIdInput = block.querySelector('input[name^="student_id__"]');
+      var studentId = studentIdInput.value.trim();
+      if (!studentId) return;
+      if (seen.has(studentId)) {
+        duplicates.push(studentId);
+      }
+      seen.add(studentId);
+    });
+    return duplicates;
+  }
+
   document.querySelector('form[action="/generate"]').addEventListener('submit', function (e) {
     var errorBox = document.getElementById('client-validation-error');
     // 임시저장 버튼으로 제출된 경우에는 검증/"생성 중" 표시를 하지 않는다.
@@ -293,6 +311,18 @@
       return;
     }
     errorBox.style.display = 'none';
+
+    var duplicateLabels = findDuplicateStudentLabels();
+    if (duplicateLabels.length > 0) {
+      var confirmed = confirm(
+        '다음 학번은 이미 생성 이력이 있습니다: ' + duplicateLabels.join(', ') + '\n' +
+        '기존 이력을 덮어쓰지 않고 새 결과로 추가됩니다. 계속 생성하시겠습니까?'
+      );
+      if (!confirmed) {
+        e.preventDefault();
+        return;
+      }
+    }
 
     var btn = document.getElementById('generate-submit-btn');
     if (!btn || btn.disabled) return;
