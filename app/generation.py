@@ -84,41 +84,95 @@ def _clamp_char_limits(min_raw: str, max_raw: str) -> tuple[int, int] | None:
     return min_limit, max_limit
 
 
-def _parse_students(form: FormData) -> list[dict]:
+def _empty_student(index: int = 0) -> dict:
+    return {
+        "index": index,
+        "student_id": "",
+        "subject": "",
+        "academic_achievement": "",
+        "activities": [{"criterion": "", "text": ""}, {"criterion": "", "text": ""}],
+    }
+
+
+def _parse_students_raw(form: FormData) -> list[dict]:
     """폼에서 student_id__0, subject__0, activity_criterion__0 ... 형태의
     인덱스가 붙은 필드들을 학생별로 묶어낸다. 인덱스는 연속적이지 않아도 된다
-    (중간 학생을 화면에서 삭제해도 나머지 인덱스는 그대로 유지되므로)."""
+    (중간 학생을 화면에서 삭제해도 나머지 인덱스는 그대로 유지되므로).
+
+    유효성 검사는 하지 않고 입력된 값을 그대로 담는다. 임시저장 및 오류 발생 시
+    입력하던 내용을 화면에 그대로 되돌려 보여주는 데 사용한다."""
     indices = sorted(
-        int(match.group(1))
-        for key in form.keys()
-        for match in [STUDENT_ID_KEY_RE.match(key)]
-        if match
+        {
+            int(match.group(1))
+            for key in form.keys()
+            for match in [STUDENT_ID_KEY_RE.match(key)]
+            if match
+        }
     )
     students = []
     for index in indices[:MAX_STUDENTS_PER_BATCH]:
-        student_id = str(form.get(f"student_id__{index}", "")).strip()
-        subject = str(form.get(f"subject__{index}", "")).strip()
-        academic_achievement = str(form.get(f"academic_achievement__{index}", "")).strip()
         criteria_values = form.getlist(f"activity_criterion__{index}")
         text_values = form.getlist(f"activity_text__{index}")
         activities = [
-            (str(criterion), str(text).strip())
+            {"criterion": str(criterion), "text": str(text)}
             for criterion, text in zip(criteria_values, text_values)
-            if str(text).strip()
         ][:MAX_ACTIVITIES]
-        if student_id and subject in get_subjects() and activities:
+        students.append(
+            {
+                "index": index,
+                "student_id": str(form.get(f"student_id__{index}", "")).strip(),
+                "subject": str(form.get(f"subject__{index}", "")).strip(),
+                "academic_achievement": str(form.get(f"academic_achievement__{index}", "")).strip(),
+                "activities": activities or [{"criterion": "", "text": ""}],
+            }
+        )
+    return students or [_empty_student()]
+
+
+def _parse_students(form: FormData) -> list[dict]:
+    """생성 요청용: 학번/과목/활동이 모두 채워진 학생만 골라, 활동을
+    (성취기준, 텍스트) 튜플 리스트로 변환한다."""
+    students = []
+    for raw in _parse_students_raw(form):
+        activities = [
+            (activity["criterion"], activity["text"].strip())
+            for activity in raw["activities"]
+            if activity["text"].strip()
+        ][:MAX_ACTIVITIES]
+        if raw["student_id"] and raw["subject"] in get_subjects() and activities:
             students.append(
                 {
-                    "student_id": student_id,
-                    "subject": subject,
-                    "academic_achievement": academic_achievement,
+                    "student_id": raw["student_id"],
+                    "subject": raw["subject"],
+                    "academic_achievement": raw["academic_achievement"],
                     "activities": activities,
                 }
             )
     return students
 
 
-def _dashboard_context(current: CurrentUser, error: str | None = None, result: list[dict] | None = None) -> dict:
+def _load_draft(current: CurrentUser) -> dict | None:
+    """사용자가 임시저장해 둔 폼 데이터를 불러온다. 저장된 초안이 없거나
+    drafts 테이블이 아직 반영되지 않은 환경이면 None을 반환한다."""
+    client = get_user_client(current["access_token"])
+    try:
+        response = (
+            client.table("drafts").select("data").eq("user_id", current["user_id"]).single().execute()
+        )
+    except Exception:
+        return None
+    return response.data.get("data") if response.data else None
+
+
+def _dashboard_context(
+    current: CurrentUser,
+    error: str | None = None,
+    notice: str | None = None,
+    result: list[dict] | None = None,
+    students: list[dict] | None = None,
+    min_char_limit: int | str | None = None,
+    max_char_limit: int | str | None = None,
+) -> dict:
     client = get_user_client(current["access_token"])
     unlimited = _is_unlimited(current["profile"])
     status = ledger_status(get_service_client(), current["profile"]["email"])
@@ -138,13 +192,29 @@ def _dashboard_context(current: CurrentUser, error: str | None = None, result: l
     subject_criteria_json = json.dumps(
         {subject: get_criteria(subject) for subject in subjects}, ensure_ascii=False
     )
+
+    draft = None
+    if students is None or min_char_limit is None or max_char_limit is None:
+        draft = _load_draft(current) or {}
+
+    if students is None:
+        students = draft.get("students") or [_empty_student()]
+    if min_char_limit is None:
+        min_char_limit = draft.get("min_char_limit") or DEFAULT_MIN_CHAR_LIMIT
+    if max_char_limit is None:
+        max_char_limit = draft.get("max_char_limit") or DEFAULT_MAX_CHAR_LIMIT
+
+    next_student_index = max((s["index"] for s in students), default=-1) + 1
+
     return {
         "profile": current["profile"],
         "subjects": subjects,
         "subject_criteria_json": subject_criteria_json,
         "academic_levels": ACADEMIC_ACHIEVEMENT_LEVELS,
-        "default_min_char_limit": DEFAULT_MIN_CHAR_LIMIT,
-        "default_max_char_limit": DEFAULT_MAX_CHAR_LIMIT,
+        "students": students,
+        "next_student_index": next_student_index,
+        "min_char_limit": min_char_limit,
+        "max_char_limit": max_char_limit,
         "hard_max_char_limit": HARD_MAX_CHAR_LIMIT,
         "max_students_per_batch": MAX_STUDENTS_PER_BATCH,
         "used": used,
@@ -155,6 +225,7 @@ def _dashboard_context(current: CurrentUser, error: str | None = None, result: l
         "history": history,
         "sensitive_info_notice": SENSITIVE_INFO_NOTICE,
         "error": error,
+        "notice": notice,
         "result": result,
     }
 
@@ -165,20 +236,48 @@ async def dashboard(request: Request, current: CurrentUser = Depends(require_app
     return templates.TemplateResponse(request, "dashboard.html", context)
 
 
+@router.post("/draft/save")
+async def save_draft(request: Request, current: CurrentUser = Depends(require_approved)):
+    form = await request.form()
+    raw_students = _parse_students_raw(form)
+    min_char_raw = form.get("min_char_limit", str(DEFAULT_MIN_CHAR_LIMIT))
+    max_char_raw = form.get("max_char_limit", str(DEFAULT_MAX_CHAR_LIMIT))
+
+    draft_data = {
+        "students": raw_students,
+        "min_char_limit": min_char_raw,
+        "max_char_limit": max_char_raw,
+    }
+    client = get_user_client(current["access_token"])
+    client.table("drafts").upsert({"user_id": current["user_id"], "data": draft_data}).execute()
+
+    context = _dashboard_context(
+        current,
+        notice="임시저장되었습니다.",
+        students=raw_students,
+        min_char_limit=min_char_raw,
+        max_char_limit=max_char_raw,
+    )
+    return templates.TemplateResponse(request, "dashboard.html", context)
+
+
 @router.post("/generate")
 async def generate(request: Request, current: CurrentUser = Depends(require_approved)):
     form = await request.form()
+    raw_students = _parse_students_raw(form)
     students = _parse_students(form)
 
-    char_limits = _clamp_char_limits(
-        form.get("min_char_limit", str(DEFAULT_MIN_CHAR_LIMIT)),
-        form.get("max_char_limit", str(DEFAULT_MAX_CHAR_LIMIT)),
-    )
+    min_char_raw = form.get("min_char_limit", str(DEFAULT_MIN_CHAR_LIMIT))
+    max_char_raw = form.get("max_char_limit", str(DEFAULT_MAX_CHAR_LIMIT))
+    char_limits = _clamp_char_limits(min_char_raw, max_char_raw)
 
     if not students:
         context = _dashboard_context(
             current,
             error="학생을 최소 1명 이상, 각 학생마다 학번/과목/활동 내용을 입력해 주세요.",
+            students=raw_students,
+            min_char_limit=min_char_raw,
+            max_char_limit=max_char_raw,
         )
         return templates.TemplateResponse(request, "dashboard.html", context)
 
@@ -187,6 +286,9 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
             current,
             error=f"글자수 설정이 올바르지 않습니다. 최대 글자수는 {HARD_MAX_CHAR_LIMIT}자를 넘을 수 없고, "
             "최소 글자수는 최대 글자수보다 작아야 합니다.",
+            students=raw_students,
+            min_char_limit=min_char_raw,
+            max_char_limit=max_char_raw,
         )
         return templates.TemplateResponse(request, "dashboard.html", context)
 
@@ -204,6 +306,9 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
             error=f"이번 요청(학생 {len(students)}명)을 처리하면 사용 한도({settings.monthly_limit}건)를 "
             f"초과합니다. 남은 한도는 {max(settings.monthly_limit - used, 0)}건입니다. "
             "학생 수를 줄이거나 다음 리셋일까지 기다려 주세요.",
+            students=raw_students,
+            min_char_limit=min_char_limit,
+            max_char_limit=max_char_limit,
         )
         return templates.TemplateResponse(request, "dashboard.html", context)
 
@@ -217,6 +322,9 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
             current,
             error="입력 내용에 주민등록번호로 의심되는 패턴이 포함되어 있어 요청을 차단했습니다. "
             "민감정보를 제거한 뒤 다시 시도해 주세요.",
+            students=raw_students,
+            min_char_limit=min_char_limit,
+            max_char_limit=max_char_limit,
         )
         return templates.TemplateResponse(request, "dashboard.html", context)
 
@@ -224,6 +332,9 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
         context = _dashboard_context(
             current,
             error="관리자가 아직 Anthropic API 키를 설정하지 않았습니다. 잠시 후 다시 시도해 주세요.",
+            students=raw_students,
+            min_char_limit=min_char_limit,
+            max_char_limit=max_char_limit,
         )
         return templates.TemplateResponse(request, "dashboard.html", context)
 
@@ -309,5 +420,11 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
             }
         )
 
-    context = _dashboard_context(current, result=results)
+    context = _dashboard_context(
+        current,
+        result=results,
+        students=raw_students,
+        min_char_limit=min_char_limit,
+        max_char_limit=max_char_limit,
+    )
     return templates.TemplateResponse(request, "dashboard.html", context)

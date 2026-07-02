@@ -1,6 +1,6 @@
 from starlette.datastructures import FormData
 
-from app.generation import _parse_students
+from app.generation import _parse_students, _parse_students_raw
 
 
 def test_parses_single_student():
@@ -63,3 +63,29 @@ def test_skips_student_with_invalid_subject():
         ]
     )
     assert _parse_students(form) == []
+
+
+def test_raw_parse_keeps_incomplete_student_for_draft():
+    # 임시저장 시에는 비어 있거나 잘못된 값도 그대로 보존해야 한다.
+    form = FormData(
+        [
+            ("student_id__0", "10101"),
+            ("subject__0", ""),
+            ("academic_achievement__0", ""),
+            ("activity_criterion__0", "12정01-01"),
+            ("activity_text__0", ""),
+        ]
+    )
+    students = _parse_students_raw(form)
+    assert len(students) == 1
+    assert students[0]["index"] == 0
+    assert students[0]["student_id"] == "10101"
+    assert students[0]["subject"] == ""
+    assert students[0]["activities"] == [{"criterion": "12정01-01", "text": ""}]
+
+
+def test_raw_parse_empty_form_returns_single_empty_student():
+    students = _parse_students_raw(FormData([]))
+    assert len(students) == 1
+    assert students[0]["index"] == 0
+    assert students[0]["student_id"] == ""
