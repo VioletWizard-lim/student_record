@@ -70,6 +70,25 @@ label {
   margin-top: 14px;
 }
 
+.field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.field-row .field {
+  flex: 1 1 200px;
+  min-width: 160px;
+}
+
+.field-row .field.field-narrow {
+  flex: 0 1 180px;
+}
+
+.field-row label {
+  margin-top: 14px;
+}
+
 input[type="text"],
 input[type="email"],
 input[type="password"],
