@@ -7,23 +7,39 @@
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <a href="/">생기부 도우미</a>
-    <nav>
-      {% if profile %}
-        <span class="muted">{{ profile.display_name or profile.email }}</span>
-        {% if profile.role == "admin" %}
-          <a href="/admin">관리자</a>
+  <div class="app-shell{% if profile %} app-shell-sidebar{% endif %}">
+    {% if profile %}
+    <aside class="sidebar">
+      <a class="sidebar-brand" href="/dashboard">생기부 도우미</a>
+      <nav class="sidebar-nav">
+        {% if profile.status == "approved" %}
+        <a href="/dashboard" class="{% if active_nav == 'dashboard' %}active{% endif %}">생기부 문구 생성</a>
+        <a href="/history" class="{% if active_nav == 'history' %}active{% endif %}">생성 이력</a>
         {% endif %}
+        {% if profile.role != "admin" %}
+        <a href="/account" class="{% if active_nav == 'account' %}active{% endif %}">계정 삭제</a>
+        {% endif %}
+        {% if profile.role == "admin" %}
+        <a href="/admin" class="{% if active_nav == 'admin' %}active{% endif %}">관리자 모드</a>
+        {% endif %}
+      </nav>
+      <div class="sidebar-footer">
+        <div class="muted">{{ profile.display_name or profile.email }}</div>
         <a href="/logout">로그아웃</a>
-      {% else %}
+      </div>
+    </aside>
+    {% else %}
+    <header class="topbar">
+      <a href="/">생기부 도우미</a>
+      <nav>
         <a href="/login">로그인</a>
         <a href="/signup">회원가입</a>
-      {% endif %}
-    </nav>
-  </header>
-  <main class="container">
-    {% block content %}{% endblock %}
-  </main>
+      </nav>
+    </header>
+    {% endif %}
+    <main class="container">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
 </body>
 </html>

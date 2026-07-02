@@ -45,10 +45,86 @@ header.topbar nav a {
   color: var(--muted);
 }
 
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-shell.app-shell-sidebar {
+  flex-direction: row;
+}
+
+.sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 0;
+}
+
+.sidebar-brand {
+  display: block;
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 700;
+  padding: 0 20px 16px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.sidebar-nav a {
+  padding: 10px 20px;
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+  border-left: 3px solid transparent;
+}
+
+.sidebar-nav a:hover {
+  background: var(--notice-bg);
+  color: var(--text);
+}
+
+.sidebar-nav a.active {
+  color: var(--primary);
+  border-left-color: var(--primary);
+  background: var(--notice-bg);
+}
+
+.sidebar-footer {
+  padding: 16px 20px 0;
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-footer .muted {
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.sidebar-footer a {
+  color: var(--danger);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 13px;
+}
+
 main.container {
   max-width: 880px;
   margin: 32px auto;
   padding: 0 20px 60px;
+  flex: 1;
+  min-width: 0;
 }
 
 .card {
