@@ -34,18 +34,25 @@
 
 <div class="card">
   <h2>사용자별 사용량</h2>
+  <p class="muted">한도 수정란을 비워두고 저장하면 전역 기본값({{ default_monthly_limit }}건)을 다시 따릅니다.</p>
   <table>
     <thead>
-      <tr><th>이메일</th><th>상태</th><th>사용량</th><th>잔여</th><th>리셋</th></tr>
+      <tr><th>이메일</th><th>상태</th><th>사용량</th><th>잔여</th><th>리셋</th><th>한도 수정</th></tr>
     </thead>
     <tbody>
       {% for row in usage_rows %}
       <tr>
         <td>{{ row.profile.email }}</td>
         <td><span class="tag">{{ row.profile.status }}</span></td>
-        <td>{{ row.used }}/{{ row.limit }}</td>
+        <td>{{ row.used }}/{{ row.limit }}{% if row.custom_limit is not none %} <span class="tag">개별 설정</span>{% endif %}</td>
         <td>{{ row.remaining }}</td>
         <td>D-{{ row.reset_days }}</td>
+        <td>
+          <form method="post" action="/admin/limit/{{ row.profile.id }}" style="display:flex; gap:6px; align-items:center;">
+            <input type="number" name="monthly_limit" min="0" placeholder="기본값({{ default_monthly_limit }})" value="{{ row.custom_limit if row.custom_limit is not none else '' }}" style="width:110px;" />
+            <button type="submit" class="row-add" style="margin-top:0;">저장</button>
+          </form>
+        </td>
       </tr>
       {% endfor %}
     </tbody>

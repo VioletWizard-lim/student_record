@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}생성 이력 - 생기부 도우미{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2>생성 이력</h2>
+  {% if history %}
+  <table>
+    <thead>
+      <tr><th>일시</th><th>학번</th><th>영역</th><th>결과</th></tr>
+    </thead>
+    <tbody>
+      {% for item in history %}
+      <tr>
+        <td class="muted">{{ item.created_at[:16].replace("T", " ") }}</td>
+        <td>{{ item.student_label }}</td>
+        <td><span class="tag">{{ item.category or "-" }}</span></td>
+        <td>
+          <details class="history-result">
+            <summary>{{ item.output_text[:60] }}{% if item.output_text|length > 60 %}...{% endif %}</summary>
+            <div class="result-box">{{ item.output_text }}</div>
+          </details>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">아직 생성 이력이 없습니다.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

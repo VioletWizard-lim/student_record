@@ -4,7 +4,7 @@ import re
 from fastapi import APIRouter, Depends, Request
 from starlette.datastructures import FormData
 
-from app.charcount import neis_char_count
+from app.charcount import neis_byte_count
 from app.config import settings
 from app.deps import CurrentUser, require_approved, templates
 from app.pii import SENSITIVE_INFO_NOTICE, contains_rrn
@@ -18,8 +18,8 @@ ACADEMIC_ACHIEVEMENT_LEVELS = ["A", "B", "C", "D", "E"]
 
 DEFAULT_MIN_CHAR_LIMIT = 600
 DEFAULT_MAX_CHAR_LIMIT = 700
-# 나이스 글자수 계산 기준 상한. 교사가 이보다 큰 값을 지정할 수 없다
-# (실제 나이스 입력 필드 제한, 한글 기준 약 3000바이트에 해당).
+# 나이스 바이트 계산 기준 상한. 교사가 이보다 큰 값을 지정할 수 없다
+# (실제 나이스 입력 필드 제한).
 HARD_MAX_CHAR_LIMIT = 1000
 MAX_ACTIVITIES = 10
 # 한 번에 처리할 수 있는 최대 학생 수 (요청 하나에 순차적으로 Claude API를
@@ -37,7 +37,7 @@ SYSTEM_PROMPT = """당신은 대한민국 고등학교 교사입니다. 담당 �
 5. 서술 순서는 반드시 "교과 성취 수준 → 수행 특기사항 → 교과 역량 → 수업 태도" 순서를 따릅니다.
 6. 교사의 관점에서, 학생을 주어로 한 3인칭 시점으로 서술합니다 (1인칭 표현 금지).
 7. 입력된 활동이 여러 개이더라도 활동별로 나누어 쓰지 않고, 이를 모두 종합해 하나의 통일된 문단으로 작성합니다.
-8. 전체 글자수(나이스 글자수 계산 기준, 공백 포함)는 사용자가 지정한 최소/최대 글자수 범위를 지켜 작성합니다.
+8. 전체 바이트 수(나이스 바이트 계산 기준, 공백 포함)는 사용자가 지정한 최소/최대 바이트 범위를 지켜 작성합니다.
 9. 결과는 반드시 result라는 문자열 하나만 가진 JSON으로 출력하고, 다른 설명이나 머리말은 덧붙이지 않습니다."""
 
 STUDENT_ID_KEY_RE = re.compile(r"^student_id__(\d+)$")
@@ -60,7 +60,7 @@ def _build_user_prompt(
     lines.append(
         f"\n위 교과 성취 수준과 활동 {len(activities)}개의 관찰 자료를 모두 반영해, "
         f"하나의 세부능력 및 특기사항 문단을 작성해 주세요. "
-        f"목표 글자수: 공백 포함 {min_char_limit}자 이상 {max_char_limit}자 이하 (나이스 글자수 계산 기준)."
+        f"목표 바이트 수: 공백 포함 {min_char_limit}바이트 이상 {max_char_limit}바이트 이하 (나이스 바이트 계산 기준)."
     )
     return "\n".join(lines)
 
@@ -172,21 +172,12 @@ def _dashboard_context(
     min_char_limit: int | str | None = None,
     max_char_limit: int | str | None = None,
 ) -> dict:
-    client = get_user_client(current["access_token"])
     unlimited = _is_unlimited(current["profile"])
     status = ledger_status(get_service_client(), current["profile"]["email"])
     used = status["used"]
-    remaining = None if unlimited else max(settings.monthly_limit - used, 0)
+    limit = status["monthly_limit"]
+    remaining = None if unlimited else max(limit - used, 0)
     reset_days = days_until_reset(status["period_start"])
-    history = (
-        client.table("generations")
-        .select("*")
-        .eq("user_id", current["user_id"])
-        .order("created_at", desc=True)
-        .limit(20)
-        .execute()
-        .data
-    )
     subjects = get_subjects()
     subject_criteria_json = json.dumps(
         {subject: get_criteria(subject) for subject in subjects}, ensure_ascii=False
@@ -217,15 +208,15 @@ def _dashboard_context(
         "hard_max_char_limit": HARD_MAX_CHAR_LIMIT,
         "max_students_per_batch": MAX_STUDENTS_PER_BATCH,
         "used": used,
-        "limit": settings.monthly_limit,
+        "limit": limit,
         "unlimited": unlimited,
         "remaining": remaining,
         "reset_days": reset_days,
-        "history": history,
         "sensitive_info_notice": SENSITIVE_INFO_NOTICE,
         "error": error,
         "notice": notice,
         "result": result,
+        "active_nav": "dashboard",
     }
 
 
@@ -233,6 +224,25 @@ def _dashboard_context(
 async def dashboard(request: Request, current: CurrentUser = Depends(require_approved)):
     context = _dashboard_context(current)
     return templates.TemplateResponse(request, "dashboard.html", context)
+
+
+@router.get("/history")
+async def history_page(request: Request, current: CurrentUser = Depends(require_approved)):
+    client = get_user_client(current["access_token"])
+    history = (
+        client.table("generations")
+        .select("*")
+        .eq("user_id", current["user_id"])
+        .order("created_at", desc=True)
+        .limit(50)
+        .execute()
+        .data
+    )
+    return templates.TemplateResponse(
+        request,
+        "history.html",
+        {"profile": current["profile"], "history": history, "active_nav": "history"},
+    )
 
 
 @router.post("/draft/save")
@@ -283,8 +293,8 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
     if char_limits is None:
         context = _dashboard_context(
             current,
-            error=f"글자수 설정이 올바르지 않습니다. 최대 글자수는 {HARD_MAX_CHAR_LIMIT}자를 넘을 수 없고, "
-            "최소 글자수는 최대 글자수보다 작아야 합니다.",
+            error=f"바이트 설정이 올바르지 않습니다. 최대 바이트는 {HARD_MAX_CHAR_LIMIT}바이트를 넘을 수 없고, "
+            "최소 바이트는 최대 바이트보다 작아야 합니다.",
             students=raw_students,
             min_char_limit=min_char_raw,
             max_char_limit=max_char_raw,
@@ -297,13 +307,14 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
     service_client = get_service_client()
     status = ledger_status(service_client, current["profile"]["email"])
     used = status["used"]
+    limit = status["monthly_limit"]
     unlimited = _is_unlimited(current["profile"])
 
-    if not unlimited and used + len(students) > settings.monthly_limit:
+    if not unlimited and used + len(students) > limit:
         context = _dashboard_context(
             current,
-            error=f"이번 요청(학생 {len(students)}명)을 처리하면 사용 한도({settings.monthly_limit}건)를 "
-            f"초과합니다. 남은 한도는 {max(settings.monthly_limit - used, 0)}건입니다. "
+            error=f"이번 요청(학생 {len(students)}명)을 처리하면 사용 한도({limit}건)를 "
+            f"초과합니다. 남은 한도는 {max(limit - used, 0)}건입니다. "
             "학생 수를 줄이거나 다음 리셋일까지 기다려 주세요.",
             students=raw_students,
             min_char_limit=min_char_limit,
@@ -390,7 +401,7 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
             )
             continue
 
-        char_count = neis_char_count(result_text)
+        char_count = neis_byte_count(result_text)
 
         client.table("generations").insert(
             {
@@ -415,7 +426,6 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
                 "count": char_count,
                 "min_char_limit": min_char_limit,
                 "max_char_limit": max_char_limit,
-                "out_of_range": char_count < min_char_limit or char_count > max_char_limit,
             }
         )
 

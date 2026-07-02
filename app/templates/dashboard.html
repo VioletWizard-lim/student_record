@@ -94,16 +94,16 @@
 
     <div class="field-row">
       <div class="field field-narrow">
-        <label for="min_char_limit">목표 글자수 (최소)</label>
+        <label for="min_char_limit">목표 바이트 (최소)</label>
         <input type="number" id="min_char_limit" name="min_char_limit" min="1" max="{{ hard_max_char_limit }}" value="{{ min_char_limit }}" />
       </div>
       <div class="field field-narrow">
-        <label for="max_char_limit">목표 글자수 (최대)</label>
+        <label for="max_char_limit">목표 바이트 (최대)</label>
         <input type="number" id="max_char_limit" name="max_char_limit" min="1" max="{{ hard_max_char_limit }}" value="{{ max_char_limit }}" />
       </div>
     </div>
 
-    <p class="muted">학생별로 입력한 활동을 모두 종합해 하나의 세특 문단(나이스 글자수 계산 기준)으로 생성합니다. 목표 글자수는 이번에 생성하는 모든 학생에게 동일하게 적용되며, 최대 글자수는 {{ hard_max_char_limit }}자를 넘을 수 없습니다.</p>
+    <p class="muted">학생별로 입력한 활동을 모두 종합해 하나의 세특 문단(나이스 바이트 계산 기준)으로 생성합니다. 목표 바이트는 이번에 생성하는 모든 학생에게 동일하게 적용되며, 최대 바이트는 {{ hard_max_char_limit }}바이트를 넘을 수 없습니다.</p>
 
     <button type="submit" {% if not unlimited and remaining <= 0 %}disabled{% endif %}>일괄 생성하기</button>
     <button type="submit" formaction="/draft/save" formnovalidate class="row-add">임시저장</button>
@@ -233,53 +233,16 @@
     {% if item.error %}
     <div class="error">{{ item.error }}</div>
     {% else %}
-    {% if item.out_of_range %}
-    <div class="error">글자수 {{ item.count }}자로 목표 범위({{ item.min_char_limit }}~{{ item.max_char_limit }}자)를 벗어났습니다. 필요시 내용을 조정해 다시 생성해 주세요.</div>
-    {% endif %}
     <div class="result-box">{{ item.text }}</div>
-    <p class="muted">글자수: <strong>{{ item.count }}</strong> / {{ item.min_char_limit }}~{{ item.max_char_limit }}자</p>
+    <p class="muted">바이트: <strong>{{ item.count }}</strong> / {{ item.min_char_limit }}~{{ item.max_char_limit }}바이트</p>
     {% endif %}
   </div>
   {% endfor %}
 </div>
 {% endif %}
 
-<div class="card">
-  <h3>최근 생성 이력</h3>
-  {% if history %}
-  <table>
-    <thead>
-      <tr><th>일시</th><th>학번</th><th>영역</th><th>결과</th></tr>
-    </thead>
-    <tbody>
-      {% for item in history %}
-      <tr>
-        <td class="muted">{{ item.created_at[:16].replace("T", " ") }}</td>
-        <td>{{ item.student_label }}</td>
-        <td><span class="tag">{{ item.category or "-" }}</span></td>
-        <td>{{ item.output_text[:60] }}{% if item.output_text|length > 60 %}...{% endif %}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="muted">아직 생성 이력이 없습니다.</p>
-  {% endif %}
-</div>
-
 <div class="donation">
   본 서비스는 결제 없이 운영됩니다.
 </div>
-
-{% if profile.role != "admin" %}
-<div class="card">
-  <h3>계정 삭제</h3>
-  <p class="muted">계정을 삭제하면 생성 이력을 포함한 모든 데이터가 즉시 완전히 삭제되며 복구할 수 없습니다.
-  단, 같은 이메일의 사용 건수/주기 기록(실제 내용 미포함)은 한도 우회 방지를 위해 남습니다.</p>
-  <form method="post" action="/account/delete" onsubmit="return confirm('정말 계정을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.');">
-    <button type="submit" class="danger">계정 완전 삭제</button>
-  </form>
-</div>
-{% endif %}
 
 {% endblock %}
