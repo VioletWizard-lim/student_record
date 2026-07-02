@@ -83,6 +83,12 @@ create table if not exists public.usage_ledger (
 
 alter table public.usage_ledger enable row level security;
 
+-- 일반 사용자(anon/authenticated)의 접근을 명시적으로 차단하는 정책.
+-- service-role 키는 RLS를 우회하므로 서버 쪽 접근에는 영향이 없다.
+-- (정책이 하나도 없으면 Supabase Advisor가 "RLS Enabled No Policy" 경고를 띄운다.)
+create policy "usage_ledger_no_client_access" on public.usage_ledger
+  for all using (false);
+
 -- ---------------------------------------------------------------------------
 -- 최초 관리자 지정 (가입 후 1회 수동 실행, README 참고)
 -- ---------------------------------------------------------------------------
