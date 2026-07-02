@@ -24,8 +24,11 @@ MAX_ACTIVITIES = 10
 # 한 번에 처리할 수 있는 최대 학생 수 (요청 하나에 순차적으로 Claude API를
 # 여러 번 호출하므로, 처리 시간/비용을 고려해 상한을 둔다).
 MAX_STUDENTS_PER_BATCH = 20
-# 이력 페이지에서 검색/정렬 대상으로 불러오는 최대 건수.
-HISTORY_FETCH_LIMIT = 500
+# 이력 페이지에서 검색/정렬/필터 대상으로 불러오는 최대 건수. 검색·정렬·과목
+# 필터·페이지네이션을 모두 이 범위 안에서 서버가 메모리상에서 처리하므로,
+# 이 건수를 넘는 오래된 이력은 검색/필터에 걸리지 않는다. 교사 한 명의
+# 실사용 규모(수년치 누적 기준)를 넉넉히 덮도록 여유 있게 잡았다.
+HISTORY_FETCH_LIMIT = 5000
 
 # 과목명을 프롬프트에 직접 넣으면 요청마다 시스템 프롬프트가 달라져 프롬프트
 # 캐싱이 깨지므로, 과목은 시스템 프롬프트가 아닌 사용자 프롬프트 쪽에 담는다.
@@ -301,6 +304,18 @@ def _filter_history(history: list[dict], query: str) -> list[dict]:
     ]
 
 
+def _extract_subject(category: str) -> str:
+    """"{과목} · 성취기준 ..." 형식의 category 문자열에서 과목명만 뽑아낸다."""
+    return (category or "").split(" · ", 1)[0]
+
+
+def _filter_by_subject(history: list[dict], subject: str) -> list[dict]:
+    """선택한 과목과 일치하는 이력만 남긴다. subject가 비어 있으면 전체를 반환한다."""
+    if not subject:
+        return history
+    return [row for row in history if _extract_subject(row.get("category") or "") == subject]
+
+
 def _sort_history(history: list[dict], sort: str, order: str) -> list[dict]:
     if sort not in HISTORY_SORT_FIELDS:
         sort = "created_at"
@@ -324,6 +339,7 @@ def _paginate_history(history: list[dict], page: int, page_size: int) -> tuple[l
 async def history_page(
     request: Request,
     q: str = "",
+    subject: str = "",
     sort: str = "created_at",
     order: str = "desc",
     page: int = 1,
@@ -336,6 +352,8 @@ async def history_page(
         order = "desc"
     if page_size not in HISTORY_PAGE_SIZES:
         page_size = DEFAULT_HISTORY_PAGE_SIZE
+    if subject not in get_subjects():
+        subject = ""
 
     client = get_user_client(current["access_token"])
     history = (
@@ -350,6 +368,7 @@ async def history_page(
 
     query = q.strip()
     history = _filter_history(history, query)
+    history = _filter_by_subject(history, subject)
     history = _sort_history(history, sort, order)
 
     total = len(history)
@@ -363,6 +382,8 @@ async def history_page(
             "history": page_items,
             "active_nav": "history",
             "q": query,
+            "subject": subject,
+            "subjects": get_subjects(),
             "sort": sort,
             "order": order,
             "page": page,

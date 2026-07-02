@@ -1,4 +1,4 @@
-from app.generation import _filter_history, _paginate_history, _sort_history
+from app.generation import _extract_subject, _filter_by_subject, _filter_history, _paginate_history, _sort_history
 
 SAMPLE = [
     {"created_at": "2026-06-01T10:00:00", "student_label": "10101", "category": "정보 · 성취기준 12정01-01", "output_text": "네트워크 관련 세특 문구"},
@@ -91,3 +91,28 @@ def test_paginate_history_empty_list_returns_single_page():
     assert items == []
     assert page == 1
     assert total_pages == 1
+
+
+def test_extract_subject_from_category():
+    assert _extract_subject("정보 · 성취기준 12정01-01") == "정보"
+
+
+def test_extract_subject_missing_separator_returns_whole_string():
+    assert _extract_subject("영어") == "영어"
+
+
+def test_extract_subject_empty_or_none_returns_empty_string():
+    assert _extract_subject("") == ""
+    assert _extract_subject(None) == ""
+
+
+def test_filter_by_subject_matches_exact_subject():
+    mixed = SAMPLE + [
+        {"created_at": "2026-06-04T09:00:00", "student_label": "10104", "category": "영어 · 성취기준 10영01-01", "output_text": "영어 관련 세특 문구"}
+    ]
+    result = _filter_by_subject(mixed, "영어")
+    assert [row["student_label"] for row in result] == ["10104"]
+
+
+def test_filter_by_subject_empty_returns_all():
+    assert _filter_by_subject(SAMPLE, "") == SAMPLE

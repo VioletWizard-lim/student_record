@@ -2,8 +2,8 @@
 {% block title %}생성 이력 - 생기부 도우미{% endblock %}
 {% block content %}
 
-{% macro sort_link(field, label) %}{% set next_order = 'asc' if sort == field and order == 'desc' else 'desc' %}<a href="/history?sort={{ field }}&order={{ next_order }}&q={{ q | urlencode }}&page_size={{ page_size }}">{{ label }}{% if sort == field %} {{ '▾' if order == 'desc' else '▴' }}{% endif %}</a>{% endmacro %}
-{% macro page_link(target_page, label) %}<a href="/history?q={{ q | urlencode }}&sort={{ sort }}&order={{ order }}&page_size={{ page_size }}&page={{ target_page }}">{{ label }}</a>{% endmacro %}
+{% macro sort_link(field, label) %}{% set next_order = 'asc' if sort == field and order == 'desc' else 'desc' %}<a href="/history?sort={{ field }}&order={{ next_order }}&q={{ q | urlencode }}&subject={{ subject | urlencode }}&page_size={{ page_size }}">{{ label }}{% if sort == field %} {{ '▾' if order == 'desc' else '▴' }}{% endif %}</a>{% endmacro %}
+{% macro page_link(target_page, label) %}<a href="/history?q={{ q | urlencode }}&subject={{ subject | urlencode }}&sort={{ sort }}&order={{ order }}&page_size={{ page_size }}&page={{ target_page }}">{{ label }}</a>{% endmacro %}
 
 <div class="card">
   <h2>생성 이력</h2>
@@ -11,6 +11,15 @@
     <div class="field">
       <label for="q">검색</label>
       <input type="text" id="q" name="q" value="{{ q }}" placeholder="학번, 영역, 결과 내용 검색" />
+    </div>
+    <div class="field field-narrow">
+      <label for="subject">과목</label>
+      <select id="subject" name="subject" onchange="this.form.submit()">
+        <option value="" {% if not subject %}selected{% endif %}>전체 과목</option>
+        {% for s in subjects %}
+        <option value="{{ s }}" {% if s == subject %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
     </div>
     <div class="field field-narrow">
       <label for="page_size">페이지당 표시</label>
@@ -24,7 +33,7 @@
     <input type="hidden" name="order" value="{{ order }}" />
     <div class="field field-narrow">
       <button type="submit">검색</button>
-      {% if q %}<a class="btn" href="/history?sort={{ sort }}&order={{ order }}&page_size={{ page_size }}">초기화</a>{% endif %}
+      {% if q or subject %}<a class="btn" href="/history?sort={{ sort }}&order={{ order }}&page_size={{ page_size }}">초기화</a>{% endif %}
     </div>
   </form>
 
@@ -67,8 +76,8 @@
       {% if page < total_pages %}{{ page_link(page + 1, '다음') }}{% else %}<span class="muted">다음</span>{% endif %}
     </div>
   </div>
-  {% elif q %}
-  <p class="muted">"{{ q }}"에 대한 검색 결과가 없습니다.</p>
+  {% elif q or subject %}
+  <p class="muted">검색/필터 조건에 맞는 이력이 없습니다.</p>
   {% else %}
   <p class="muted">아직 생성 이력이 없습니다.</p>
   {% endif %}
