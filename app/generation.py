@@ -89,6 +89,9 @@ def _is_unlimited(profile: dict) -> bool:
 
 
 def _clamp_char_limits(min_raw: str, max_raw: str) -> tuple[int, int] | None:
+    """입력값을 검증만 하고 조용히 바꾸지 않는다. 최대 바이트가
+    HARD_MAX_CHAR_LIMIT를 넘거나 최소가 최대보다 크면, 값을 임의로 깎지
+    않고 None을 반환해 호출 쪽에서 오류로 처리하도록 한다."""
     try:
         min_limit = int(min_raw)
         max_limit = int(max_raw)
@@ -96,7 +99,8 @@ def _clamp_char_limits(min_raw: str, max_raw: str) -> tuple[int, int] | None:
         return None
     if min_limit < 1 or max_limit < 1:
         return None
-    max_limit = min(max_limit, HARD_MAX_CHAR_LIMIT)
+    if max_limit > HARD_MAX_CHAR_LIMIT:
+        return None
     if min_limit > max_limit:
         return None
     return min_limit, max_limit
