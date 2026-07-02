@@ -222,6 +222,16 @@ button.danger, .btn.danger {
   margin-bottom: 16px;
 }
 
+.warning {
+  background: #fff8e6;
+  border: 1px solid #f0d78c;
+  color: #8a6300;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: 13.5px;
+}
+
 .usage-widget {
   display: flex;
   gap: 24px;

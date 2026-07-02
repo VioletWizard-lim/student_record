@@ -13,10 +13,11 @@ def test_parses_single_student():
             ("activity_text__0", "관찰 내용 1"),
         ]
     )
-    students = _parse_students(form)
+    students, skipped = _parse_students(form)
     assert len(students) == 1
     assert students[0]["student_id"] == "10101"
     assert students[0]["activities"] == [("12정01-01", "관찰 내용 1")]
+    assert skipped == []
 
 
 def test_parses_multiple_students_with_gaps():
@@ -35,8 +36,9 @@ def test_parses_multiple_students_with_gaps():
             ("activity_text__2", "관찰 내용 3"),
         ]
     )
-    students = _parse_students(form)
+    students, skipped = _parse_students(form)
     assert [s["student_id"] for s in students] == ["10101", "10103"]
+    assert skipped == []
 
 
 def test_skips_student_with_no_activities():
@@ -49,7 +51,9 @@ def test_skips_student_with_no_activities():
             ("activity_text__0", "   "),
         ]
     )
-    assert _parse_students(form) == []
+    students, skipped = _parse_students(form)
+    assert students == []
+    assert skipped == [{"label": "10101", "reason": "활동 관찰 자료가 입력되지 않았습니다."}]
 
 
 def test_skips_student_with_invalid_subject():
@@ -62,7 +66,44 @@ def test_skips_student_with_invalid_subject():
             ("activity_text__0", "관찰 내용"),
         ]
     )
-    assert _parse_students(form) == []
+    students, skipped = _parse_students(form)
+    assert students == []
+    assert skipped == [{"label": "10101", "reason": "과목이 선택되지 않았습니다."}]
+
+
+def test_skips_student_with_no_student_id():
+    form = FormData(
+        [
+            ("student_id__0", ""),
+            ("subject__0", "정보"),
+            ("academic_achievement__0", "A"),
+            ("activity_criterion__0", "12정01-01"),
+            ("activity_text__0", "관찰 내용"),
+        ]
+    )
+    students, skipped = _parse_students(form)
+    assert students == []
+    assert skipped == [{"label": "1번째 학생", "reason": "학번이 입력되지 않았습니다."}]
+
+
+def test_partial_skip_keeps_valid_students():
+    form = FormData(
+        [
+            ("student_id__0", "10101"),
+            ("subject__0", "정보"),
+            ("academic_achievement__0", "A"),
+            ("activity_criterion__0", "12정01-01"),
+            ("activity_text__0", "관찰 내용 1"),
+            ("student_id__1", ""),
+            ("subject__1", "정보"),
+            ("academic_achievement__1", ""),
+            ("activity_criterion__1", "12정01-02"),
+            ("activity_text__1", "관찰 내용 2"),
+        ]
+    )
+    students, skipped = _parse_students(form)
+    assert [s["student_id"] for s in students] == ["10101"]
+    assert skipped == [{"label": "2번째 학생", "reason": "학번이 입력되지 않았습니다."}]
 
 
 def test_raw_parse_keeps_incomplete_student_for_draft():
