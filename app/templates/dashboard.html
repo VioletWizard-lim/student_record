@@ -255,9 +255,6 @@
     {% if item.duplicate_student %}
     <div class="warning">이미 이전에 생성한 이력이 있는 학번입니다. 기존 이력을 덮어쓰지 않고 새 결과로 추가되었습니다.</div>
     {% endif %}
-    {% if item.duplicate_criteria %}
-    <div class="warning">같은 성취기준을 여러 활동에 중복 선택했습니다. 의도한 것이 맞는지 확인해 주세요.</div>
-    {% endif %}
     <div class="result-box">{{ item.text }}</div>
     <p class="muted">바이트: <strong>{{ item.count }}</strong> / {{ item.min_char_limit }}~{{ item.max_char_limit }}바이트</p>
     {% endif %}
