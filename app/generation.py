@@ -4,9 +4,9 @@ from fastapi.responses import RedirectResponse
 from app.config import settings
 from app.deps import CurrentUser, require_approved
 from app.pii import SENSITIVE_INFO_NOTICE, contains_rrn
-from app.supabase_client import get_user_client
+from app.supabase_client import get_service_client, get_user_client
 from app.templating import templates
-from app.usage import count_usage, current_period_start, days_until_reset, parse_ts
+from app.usage import days_until_reset, ledger_status, record_generation
 
 router = APIRouter()
 
@@ -45,12 +45,11 @@ def _is_unlimited(profile: dict) -> bool:
 
 def _dashboard_context(current: CurrentUser, error: str | None = None, result: str | None = None) -> dict:
     client = get_user_client(current["access_token"])
-    created_at = parse_ts(current["profile"]["created_at"])
-    period_start = current_period_start(created_at)
-    used = count_usage(client, current["user_id"], period_start)
     unlimited = _is_unlimited(current["profile"])
+    status = ledger_status(get_service_client(), current["profile"]["email"])
+    used = status["used"]
     remaining = None if unlimited else max(settings.monthly_limit - used, 0)
-    reset_days = days_until_reset(period_start)
+    reset_days = days_until_reset(status["period_start"])
     history = (
         client.table("generations")
         .select("*")
@@ -91,9 +90,9 @@ async def generate(
     current: CurrentUser = Depends(require_approved),
 ):
     client = get_user_client(current["access_token"])
-    created_at = parse_ts(current["profile"]["created_at"])
-    period_start = current_period_start(created_at)
-    used = count_usage(client, current["user_id"], period_start)
+    service_client = get_service_client()
+    status = ledger_status(service_client, current["profile"]["email"])
+    used = status["used"]
 
     if not _is_unlimited(current["profile"]) and used >= settings.monthly_limit:
         context = _dashboard_context(
@@ -153,6 +152,9 @@ async def generate(
             "model": settings.anthropic_model,
         }
     ).execute()
+
+    if not _is_unlimited(current["profile"]):
+        record_generation(service_client, current["profile"]["email"], used)
 
     context = _dashboard_context(current, result=output_text)
     return templates.TemplateResponse(request, "dashboard.html", context)
