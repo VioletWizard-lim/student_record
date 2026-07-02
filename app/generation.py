@@ -1,7 +1,6 @@
 import json
 
-from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, Request
 
 from app.charcount import neis_char_count
 from app.config import settings
@@ -15,35 +14,32 @@ router = APIRouter()
 
 ACHIEVEMENT_CRITERIA = ["A", "B", "C", "D", "E"]
 COMBINED_CHAR_LIMIT = 1000
+MAX_ACTIVITIES = 10
 
 SYSTEM_PROMPT = """당신은 대한민국 초·중·고 교사의 학교생활기록부(생기부) 문구 작성을 돕는 보조 도구입니다.
 다음 규칙을 반드시 지켜 작성하세요.
 1. 제공된 관찰 자료에 있는 사실만을 근거로 서술하고, 근거 없는 내용을 추가하거나 과장하지 않습니다.
 2. 문체는 학교생활기록부 작성 요령에 맞는 개조식이 아닌 서술형 문장으로, 종결어미는 '~함', '~임' 형태의 명사형 종결을 사용합니다.
 3. 학생을 주어로 3인칭 관점에서 객관적으로 서술하고, 1인칭 표현은 사용하지 않습니다.
-4. activity1과 activity2 결과를 합친 전체 글자수가 지정된 글자수 제한을 넘지 않도록, 각 활동을 절반 정도의 분량으로 간결하게 작성합니다.
-5. 결과는 반드시 activity1, activity2 두 개의 필드를 가진 JSON으로만 출력하고, 다른 설명이나 머리말은 덧붙이지 않습니다."""
+4. 활동은 입력받은 순서 그대로, 입력된 개수와 동일한 개수만큼 결과를 작성합니다. 전체 활동 결과를 합친 글자수가 지정된 글자수 제한을 넘지 않도록, 활동 개수에 맞게 분량을 균등히 나눠 간결하게 작성합니다.
+5. 결과는 반드시 activities라는 문자열 배열 하나만 가진 JSON으로 출력하고, 다른 설명이나 머리말은 덧붙이지 않습니다."""
 
 
 def _build_user_prompt(
     student_id: str,
     academic_achievement: str,
-    activity1_criterion: str,
-    activity1_text: str,
-    activity2_criterion: str,
-    activity2_text: str,
+    activities: list[tuple[str, str]],
     char_limit: int,
 ) -> str:
     lines = [f"학번: {student_id}"]
     if academic_achievement:
         lines.append(f"학업 성취도: {academic_achievement}")
-    lines.append(f"[활동1] 성취기준: {activity1_criterion}")
-    lines.append(f"[활동1] 관찰 자료: {activity1_text}")
-    lines.append(f"[활동2] 성취기준: {activity2_criterion}")
-    lines.append(f"[활동2] 관찰 자료: {activity2_text}")
+    for index, (criterion, text) in enumerate(activities, start=1):
+        lines.append(f"[활동{index}] 성취기준: {criterion}")
+        lines.append(f"[활동{index}] 관찰 자료: {text}")
     lines.append(
-        f"\n위 관찰 자료를 바탕으로 활동1, 활동2 각각의 생기부 문구를 작성해 주세요. "
-        f"activity1과 activity2를 합친 전체 글자수가 공백 포함 {char_limit}자를 넘지 않도록 해주세요."
+        f"\n위 관찰 자료를 바탕으로 활동 {len(activities)}개 각각의 생기부 문구를 작성해 주세요. "
+        f"전체 활동 결과를 합친 글자수가 공백 포함 {char_limit}자를 넘지 않도록 해주세요."
     )
     return "\n".join(lines)
 
@@ -91,16 +87,24 @@ async def dashboard(request: Request, current: CurrentUser = Depends(require_app
 
 
 @router.post("/generate")
-async def generate(
-    request: Request,
-    student_id: str = Form(...),
-    academic_achievement: str = Form(""),
-    activity1_criterion: str = Form(...),
-    activity1_text: str = Form(...),
-    activity2_criterion: str = Form(...),
-    activity2_text: str = Form(...),
-    current: CurrentUser = Depends(require_approved),
-):
+async def generate(request: Request, current: CurrentUser = Depends(require_approved)):
+    form = await request.form()
+    student_id = str(form.get("student_id", "")).strip()
+    academic_achievement = str(form.get("academic_achievement", "")).strip()
+    criteria_values = form.getlist("activity_criterion")
+    text_values = form.getlist("activity_text")
+    activities = [
+        (str(criterion), str(text).strip())
+        for criterion, text in zip(criteria_values, text_values)
+        if str(text).strip()
+    ][:MAX_ACTIVITIES]
+
+    if not student_id or not activities:
+        context = _dashboard_context(
+            current, error="학번과 최소 1개 이상의 활동 내용을 입력해 주세요."
+        )
+        return templates.TemplateResponse(request, "dashboard.html", context)
+
     client = get_user_client(current["access_token"])
     service_client = get_service_client()
     status = ledger_status(service_client, current["profile"]["email"])
@@ -114,7 +118,7 @@ async def generate(
         )
         return templates.TemplateResponse(request, "dashboard.html", context)
 
-    if contains_rrn(student_id, academic_achievement, activity1_text, activity2_text):
+    if contains_rrn(student_id, academic_achievement, *[text for _, text in activities]):
         context = _dashboard_context(
             current,
             error="입력 내용에 주민등록번호로 의심되는 패턴이 포함되어 있어 요청을 차단했습니다. "
@@ -132,15 +136,7 @@ async def generate(
     from anthropic import Anthropic
 
     anthropic_client = Anthropic(api_key=settings.anthropic_api_key)
-    user_prompt = _build_user_prompt(
-        student_id,
-        academic_achievement,
-        activity1_criterion,
-        activity1_text,
-        activity2_criterion,
-        activity2_text,
-        COMBINED_CHAR_LIMIT,
-    )
+    user_prompt = _build_user_prompt(student_id, academic_achievement, activities, COMBINED_CHAR_LIMIT)
 
     try:
         response = anthropic_client.messages.create(
@@ -159,10 +155,12 @@ async def generate(
                     "schema": {
                         "type": "object",
                         "properties": {
-                            "activity1": {"type": "string"},
-                            "activity2": {"type": "string"},
+                            "activities": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
                         },
-                        "required": ["activity1", "activity2"],
+                        "required": ["activities"],
                         "additionalProperties": False,
                     },
                 }
@@ -171,23 +169,28 @@ async def generate(
         )
         text = next(block.text for block in response.content if block.type == "text")
         data = json.loads(text)
-        activity1_result = data["activity1"]
-        activity2_result = data["activity2"]
+        activity_results = [str(item) for item in data["activities"]]
     except Exception as exc:
         context = _dashboard_context(current, error=f"Claude API 호출 중 오류가 발생했습니다: {exc}")
         return templates.TemplateResponse(request, "dashboard.html", context)
 
-    activity1_count = neis_char_count(activity1_result)
-    activity2_count = neis_char_count(activity2_result)
-    total_count = activity1_count + activity2_count
+    # 모델이 입력 개수와 다르게 반환하는 경우를 대비해 개수를 맞춰준다.
+    while len(activity_results) < len(activities):
+        activity_results.append("")
+    activity_results = activity_results[: len(activities)]
+
+    activity_counts = [neis_char_count(text) for text in activity_results]
+    total_count = sum(activity_counts)
 
     client.table("generations").insert(
         {
             "user_id": current["user_id"],
             "student_label": student_id,
-            "category": f"성취기준 {activity1_criterion}/{activity2_criterion}",
+            "category": "성취기준 " + "/".join(criterion for criterion, _ in activities),
             "input_text": user_prompt,
-            "output_text": f"[활동1]\n{activity1_result}\n\n[활동2]\n{activity2_result}",
+            "output_text": "\n\n".join(
+                f"[활동{i}]\n{text}" for i, text in enumerate(activity_results, start=1)
+            ),
             "model": settings.anthropic_model,
         }
     ).execute()
@@ -196,10 +199,10 @@ async def generate(
         record_generation(service_client, current["profile"]["email"], used)
 
     result = {
-        "activity1": activity1_result,
-        "activity2": activity2_result,
-        "activity1_count": activity1_count,
-        "activity2_count": activity2_count,
+        "activities": [
+            {"index": i, "text": text, "count": count}
+            for i, (text, count) in enumerate(zip(activity_results, activity_counts), start=1)
+        ],
         "total_count": total_count,
         "over_limit": total_count > COMBINED_CHAR_LIMIT,
     }

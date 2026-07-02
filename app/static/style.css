@@ -189,6 +189,24 @@ th, td {
   resize: vertical;
 }
 
+.row-remove {
+  margin-top: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.row-add {
+  margin-top: 10px;
+  background: var(--card);
+  color: var(--primary);
+  border: 1px solid var(--primary);
+}
+
+.row-add:hover {
+  background: var(--notice-bg);
+}
+
 .muted {
   color: var(--muted);
   font-size: 13px;
