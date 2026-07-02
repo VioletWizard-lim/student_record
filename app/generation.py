@@ -457,11 +457,11 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
         try:
             response = anthropic_client.messages.create(
                 model=settings.anthropic_model,
-                # Sonnet 5는 thinking을 명시하지 않으면 기본적으로 적응형 사고가
-                # 켜져 있어, 4096 정도로는 사고 과정만으로 토큰을 다 써버려
-                # 정작 결과 텍스트를 못 받는 경우(stop_reason=max_tokens)가
-                # 있었다. 실제 출력은 짧지만 사고에 여유를 주기 위해 상한을 올린다.
-                max_tokens=16000,
+                # thinking을 꺼서 사고 과정에 토큰을 쓰지 않으므로, 결과 텍스트
+                # (최대 HARD_MAX_CHAR_LIMIT 바이트)만 감당하면 되는 수준으로
+                # max_tokens를 낮춘다.
+                max_tokens=1000,
+                thinking={"type": "disabled"},
                 system=[
                     {
                         "type": "text",
