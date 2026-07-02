@@ -25,6 +25,8 @@ MAX_ACTIVITIES = 10
 # 한 번에 처리할 수 있는 최대 학생 수 (요청 하나에 순차적으로 Claude API를
 # 여러 번 호출하므로, 처리 시간/비용을 고려해 상한을 둔다).
 MAX_STUDENTS_PER_BATCH = 20
+# 이력 페이지에서 검색/정렬 대상으로 불러오는 최대 건수.
+HISTORY_FETCH_LIMIT = 500
 
 # 과목명을 프롬프트에 직접 넣으면 요청마다 시스템 프롬프트가 달라져 프롬프트
 # 캐싱이 깨지므로, 과목은 시스템 프롬프트가 아닌 사용자 프롬프트 쪽에 담는다.
@@ -226,22 +228,71 @@ async def dashboard(request: Request, current: CurrentUser = Depends(require_app
     return templates.TemplateResponse(request, "dashboard.html", context)
 
 
+HISTORY_SORT_FIELDS = {"created_at", "student_label", "category"}
+
+
+def _filter_history(history: list[dict], query: str) -> list[dict]:
+    """학번/영역/결과 내용에 검색어가 포함된 이력만 남긴다 (대소문자 무시)."""
+    query = query.strip()
+    if not query:
+        return history
+    needle = query.lower()
+    return [
+        row
+        for row in history
+        if needle in (row.get("student_label") or "").lower()
+        or needle in (row.get("category") or "").lower()
+        or needle in (row.get("output_text") or "").lower()
+    ]
+
+
+def _sort_history(history: list[dict], sort: str, order: str) -> list[dict]:
+    if sort not in HISTORY_SORT_FIELDS:
+        sort = "created_at"
+    if order not in ("asc", "desc"):
+        order = "desc"
+    return sorted(history, key=lambda row: row.get(sort) or "", reverse=(order == "desc"))
+
+
 @router.get("/history")
-async def history_page(request: Request, current: CurrentUser = Depends(require_approved)):
+async def history_page(
+    request: Request,
+    q: str = "",
+    sort: str = "created_at",
+    order: str = "desc",
+    current: CurrentUser = Depends(require_approved),
+):
+    if sort not in HISTORY_SORT_FIELDS:
+        sort = "created_at"
+    if order not in ("asc", "desc"):
+        order = "desc"
+
     client = get_user_client(current["access_token"])
     history = (
         client.table("generations")
         .select("*")
         .eq("user_id", current["user_id"])
         .order("created_at", desc=True)
-        .limit(50)
+        .limit(HISTORY_FETCH_LIMIT)
         .execute()
         .data
     )
+
+    query = q.strip()
+    history = _filter_history(history, query)
+    history = _sort_history(history, sort, order)
+
     return templates.TemplateResponse(
         request,
         "history.html",
-        {"profile": current["profile"], "history": history, "active_nav": "history"},
+        {
+            "profile": current["profile"],
+            "history": history,
+            "active_nav": "history",
+            "q": query,
+            "sort": sort,
+            "order": order,
+        },
     )
 
 
