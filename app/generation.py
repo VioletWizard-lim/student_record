@@ -18,9 +18,8 @@ ACADEMIC_ACHIEVEMENT_LEVELS = ["A", "B", "C", "D", "E"]
 
 DEFAULT_MIN_CHAR_LIMIT = 600
 DEFAULT_MAX_CHAR_LIMIT = 700
-# 나이스 바이트 계산 기준 상한. 교사가 이보다 큰 값을 지정할 수 없다
-# (실제 나이스 입력 필드 제한).
-HARD_MAX_CHAR_LIMIT = 1000
+# 나이스 바이트 계산 기준 상한. 교사가 이보다 큰 값을 지정할 수 없다.
+HARD_MAX_CHAR_LIMIT = 2500
 MAX_ACTIVITIES = 10
 # 한 번에 처리할 수 있는 최대 학생 수 (요청 하나에 순차적으로 Claude API를
 # 여러 번 호출하므로, 처리 시간/비용을 고려해 상한을 둔다).
@@ -470,8 +469,9 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
                 model=settings.anthropic_model,
                 # thinking을 꺼서 사고 과정에 토큰을 쓰지 않으므로, 결과 텍스트
                 # (최대 HARD_MAX_CHAR_LIMIT 바이트)만 감당하면 되는 수준으로
-                # max_tokens를 낮춘다.
-                max_tokens=1000,
+                # max_tokens를 잡는다. 한글은 바이트당 토큰 수가 영어보다 크므로
+                # 여유를 두었다.
+                max_tokens=4000,
                 thinking={"type": "disabled"},
                 system=[
                     {
