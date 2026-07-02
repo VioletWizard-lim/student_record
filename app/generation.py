@@ -39,12 +39,17 @@ def _build_user_prompt(student_label: str, category: str, observation: str, char
     return "\n".join(lines)
 
 
+def _is_unlimited(profile: dict) -> bool:
+    return profile["role"] == "admin"
+
+
 def _dashboard_context(current: CurrentUser, error: str | None = None, result: str | None = None) -> dict:
     client = get_user_client(current["access_token"])
     created_at = parse_ts(current["profile"]["created_at"])
     period_start = current_period_start(created_at)
     used = count_usage(client, current["user_id"], period_start)
-    remaining = max(settings.monthly_limit - used, 0)
+    unlimited = _is_unlimited(current["profile"])
+    remaining = None if unlimited else max(settings.monthly_limit - used, 0)
     reset_days = days_until_reset(period_start)
     history = (
         client.table("generations")
@@ -60,6 +65,7 @@ def _dashboard_context(current: CurrentUser, error: str | None = None, result: s
         "categories": CATEGORIES,
         "used": used,
         "limit": settings.monthly_limit,
+        "unlimited": unlimited,
         "remaining": remaining,
         "reset_days": reset_days,
         "history": history,
@@ -89,7 +95,7 @@ async def generate(
     period_start = current_period_start(created_at)
     used = count_usage(client, current["user_id"], period_start)
 
-    if used >= settings.monthly_limit:
+    if not _is_unlimited(current["profile"]) and used >= settings.monthly_limit:
         context = _dashboard_context(
             current,
             error=f"이번 주기 사용 한도({settings.monthly_limit}건)를 모두 사용했습니다. "
