@@ -11,6 +11,10 @@
     {% if profile %}
     <aside class="sidebar">
       <a class="sidebar-brand" href="/dashboard">생기부 도우미</a>
+      <div class="sidebar-user">
+        <div class="muted">{{ profile.display_name or profile.email }}</div>
+        <a href="/logout">로그아웃</a>
+      </div>
       <nav class="sidebar-nav">
         {% if profile.status == "approved" %}
         <a href="/dashboard" class="{% if active_nav == 'dashboard' %}active{% endif %}">생기부 문구 생성</a>
@@ -23,10 +27,6 @@
         <a href="/admin" class="{% if active_nav == 'admin' %}active{% endif %}">관리자 모드</a>
         {% endif %}
       </nav>
-      <div class="sidebar-footer">
-        <div class="muted">{{ profile.display_name or profile.email }}</div>
-        <a href="/logout">로그아웃</a>
-      </div>
     </aside>
     {% else %}
     <header class="topbar">
