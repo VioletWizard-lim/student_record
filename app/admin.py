@@ -6,7 +6,7 @@ from fastapi.responses import RedirectResponse
 from app.deps import CurrentUser, require_admin
 from app.supabase_client import get_service_client
 from app.templating import templates
-from app.usage import count_usage, current_period_start, days_until_reset, parse_ts
+from app.usage import days_until_reset, ledger_status
 from app.config import settings
 
 router = APIRouter(prefix="/admin")
@@ -36,16 +36,15 @@ async def admin_home(request: Request, current: CurrentUser = Depends(require_ad
 
     usage_rows = []
     for user in users:
-        created_at = parse_ts(user["created_at"])
-        period_start = current_period_start(created_at)
-        used = count_usage(service, user["id"], period_start)
+        status = ledger_status(service, user["email"])
+        used = status["used"]
         usage_rows.append(
             {
                 "profile": user,
                 "used": used,
                 "limit": settings.monthly_limit,
                 "remaining": max(settings.monthly_limit - used, 0),
-                "reset_days": days_until_reset(period_start),
+                "reset_days": days_until_reset(status["period_start"]),
             }
         )
 

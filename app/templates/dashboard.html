@@ -9,6 +9,8 @@
   (주민등록번호 패턴은 자동으로 차단됩니다).
   입력된 자료는 Anthropic(Claude) API로 전송되어 생기부 문구 생성에만 사용되며, 모델 학습에는 사용되지 않습니다.
   생성된 문구는 별도 만료 없이 보관되며, 계정 삭제 시 즉시 하드 삭제됩니다.
+  단, 사용 한도 우회를 막기 위해 이메일 단위의 사용 건수/주기 기록은 계정 삭제 후에도 남습니다
+  (생성 문구 등 실제 내용은 포함하지 않음).
 </div>
 
 <div class="usage-widget">
@@ -25,31 +27,80 @@
 <div class="card">
   <h2>생기부 문구 생성</h2>
   <form method="post" action="/generate">
-    <label for="student_label">학생 (이름/학번 등)</label>
-    <input type="text" id="student_label" name="student_label" required />
+    <label for="student_id">학번</label>
+    <input type="text" id="student_id" name="student_id" required style="max-width:220px;" />
 
-    <label for="category">기재 영역</label>
-    <select id="category" name="category">
-      <option value="">선택 안 함</option>
-      {% for c in categories %}
-      <option value="{{ c }}">{{ c }}</option>
-      {% endfor %}
-    </select>
+    <label for="academic_achievement">학업 성취도</label>
+    <input type="text" id="academic_achievement" name="academic_achievement" style="max-width:220px;" />
 
-    <label for="observation">관찰 자료</label>
-    <textarea id="observation" name="observation" required placeholder="학생의 학업/활동 관찰 내용을 서술해 주세요."></textarea>
+    <label>활동별 성취기준 및 관찰 자료</label>
+    <div style="overflow-x:auto;">
+      <table class="input-table" id="activity-table">
+        <thead>
+          <tr>
+            <th style="width:110px;">성취기준</th>
+            <th>관찰 자료</th>
+            <th style="width:70px;"></th>
+          </tr>
+        </thead>
+        <tbody id="activity-rows">
+          <tr>
+            <td>
+              <select name="activity_criterion" required>
+                {% for c in criteria %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+              </select>
+            </td>
+            <td><textarea name="activity_text" required placeholder="활동 관찰 자료"></textarea></td>
+            <td><button type="button" class="danger row-remove" onclick="removeActivityRow(this)">삭제</button></td>
+          </tr>
+          <tr>
+            <td>
+              <select name="activity_criterion" required>
+                {% for c in criteria %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+              </select>
+            </td>
+            <td><textarea name="activity_text" required placeholder="활동 관찰 자료"></textarea></td>
+            <td><button type="button" class="danger row-remove" onclick="removeActivityRow(this)">삭제</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <button type="button" class="row-add" onclick="addActivityRow()">+ 활동 추가</button>
 
-    <label for="char_limit">글자수 제한 (선택, 공백 포함)</label>
-    <input type="number" id="char_limit" name="char_limit" min="1" />
+    <p class="muted">전체 활동 결과를 합친 글자수가 {{ char_limit }}자(나이스 글자수 계산 기준)를 넘지 않도록 생성합니다.</p>
 
     <button type="submit" {% if not unlimited and remaining <= 0 %}disabled{% endif %}>생성하기</button>
   </form>
 </div>
 
+<script>
+  function addActivityRow() {
+    var tbody = document.getElementById('activity-rows');
+    var rows = tbody.querySelectorAll('tr');
+    var clone = rows[0].cloneNode(true);
+    clone.querySelectorAll('textarea').forEach(function (t) { t.value = ''; });
+    clone.querySelectorAll('select').forEach(function (s) { s.selectedIndex = 0; });
+    tbody.appendChild(clone);
+  }
+  function removeActivityRow(button) {
+    var tbody = document.getElementById('activity-rows');
+    if (tbody.querySelectorAll('tr').length > 1) {
+      button.closest('tr').remove();
+    }
+  }
+</script>
+
 {% if result %}
 <div class="card">
   <h3>생성 결과</h3>
-  <div class="result-box">{{ result }}</div>
+  {% if result.over_limit %}
+  <div class="error">합산 글자수 {{ result.total_count }}자로 목표 글자수({{ char_limit }}자)를 초과했습니다. 필요시 내용을 줄여서 다시 생성해 주세요.</div>
+  {% endif %}
+  {% for activity in result.activities %}
+  <h4>활동{{ activity.index }} <span class="tag">{{ activity.count }}자</span></h4>
+  <div class="result-box">{{ activity.text }}</div>
+  {% endfor %}
+  <p class="muted">합산 글자수: <strong>{{ result.total_count }}</strong> / {{ char_limit }}자</p>
 </div>
 {% endif %}
 
@@ -58,7 +109,7 @@
   {% if history %}
   <table>
     <thead>
-      <tr><th>일시</th><th>학생</th><th>영역</th><th>결과</th></tr>
+      <tr><th>일시</th><th>학번</th><th>영역</th><th>결과</th></tr>
     </thead>
     <tbody>
       {% for item in history %}
@@ -80,12 +131,15 @@
   본 서비스는 결제 없이 운영됩니다. 서비스 운영에 도움을 주고 싶으시다면 후원 계좌/QR을 통해 자율적으로 후원하실 수 있습니다 (강제 아님).
 </div>
 
+{% if profile.role != "admin" %}
 <div class="card">
   <h3>계정 삭제</h3>
-  <p class="muted">계정을 삭제하면 생성 이력을 포함한 모든 데이터가 즉시 완전히 삭제되며 복구할 수 없습니다.</p>
+  <p class="muted">계정을 삭제하면 생성 이력을 포함한 모든 데이터가 즉시 완전히 삭제되며 복구할 수 없습니다.
+  단, 같은 이메일의 사용 건수/주기 기록(실제 내용 미포함)은 한도 우회 방지를 위해 남습니다.</p>
   <form method="post" action="/account/delete" onsubmit="return confirm('정말 계정을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.');">
     <button type="submit" class="danger">계정 완전 삭제</button>
   </form>
 </div>
+{% endif %}
 
 {% endblock %}

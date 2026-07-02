@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
 from app.deps import CurrentUser, get_current_user
 from app.exceptions import RedirectException
 from app.supabase_client import get_anon_client, get_service_client
 from app.templating import templates
+from app.email_domains import is_allowed_education_email
 
 router = APIRouter()
 
@@ -21,6 +22,15 @@ async def signup(
     password: str = Form(...),
     display_name: str = Form(""),
 ):
+    if not is_allowed_education_email(email):
+        return templates.TemplateResponse(
+            request,
+            "signup.html",
+            {
+                "error": "가입은 한국 교육청 이메일(예: 인천 @ice.go.kr)로만 가능합니다.",
+            },
+        )
+
     client = get_anon_client()
     try:
         result = client.auth.sign_up({"email": email, "password": password})
@@ -96,7 +106,10 @@ async def pending_page(request: Request, current: CurrentUser = Depends(get_curr
 
 @router.post("/account/delete")
 async def delete_account(request: Request, current: CurrentUser = Depends(get_current_user)):
-    """사용자 본인 요청에 의한 즉시 하드 삭제 (복구 불가)."""
+    """사용자 본인 요청에 의한 즉시 하드 삭제 (복구 불가). 관리자 계정은 삭제할 수 없다."""
+    if current["profile"]["role"] == "admin":
+        raise HTTPException(status_code=403, detail="관리자 계정은 삭제할 수 없습니다.")
+
     service = get_service_client()
     user_id = current["user_id"]
     service.table("generations").delete().eq("user_id", user_id).execute()

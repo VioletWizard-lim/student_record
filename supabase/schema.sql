@@ -68,6 +68,22 @@ create policy "generations_insert_own" on public.generations
   for insert with check (auth.uid() = user_id);
 
 -- ---------------------------------------------------------------------------
+-- usage_ledger: 이메일 단위로 사용량 주기/카운트를 영구 보관한다.
+-- profiles/generations와 달리 계정을 하드 삭제해도 이 테이블은 지우지 않는다.
+-- 같은 이메일로 재가입해도 사용 한도가 초기화되지 않도록 하기 위함
+-- (재가입 시에는 어차피 승인 대기 상태로 돌아가 관리자 재승인이 필요하다).
+-- 일반 사용자에게는 어떤 접근 정책도 주지 않아, service-role 키로만 조작 가능하다.
+-- ---------------------------------------------------------------------------
+create table if not exists public.usage_ledger (
+  email text primary key,
+  period_start timestamptz not null default now(),
+  generation_count integer not null default 0,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.usage_ledger enable row level security;
+
+-- ---------------------------------------------------------------------------
 -- 최초 관리자 지정 (가입 후 1회 수동 실행, README 참고)
 -- ---------------------------------------------------------------------------
 -- update public.profiles set role = 'admin', status = 'approved', approved_at = now()
