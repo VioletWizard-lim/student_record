@@ -27,22 +27,39 @@
 <div class="card">
   <h2>생기부 문구 생성</h2>
   <form method="post" action="/generate">
-    <label for="student_label">학생 (이름/학번 등)</label>
-    <input type="text" id="student_label" name="student_label" required />
-
-    <label for="category">기재 영역</label>
-    <select id="category" name="category">
-      <option value="">선택 안 함</option>
-      {% for c in categories %}
-      <option value="{{ c }}">{{ c }}</option>
-      {% endfor %}
-    </select>
-
-    <label for="observation">관찰 자료</label>
-    <textarea id="observation" name="observation" required placeholder="학생의 학업/활동 관찰 내용을 서술해 주세요."></textarea>
-
-    <label for="char_limit">글자수 제한 (선택, 공백 포함)</label>
-    <input type="number" id="char_limit" name="char_limit" min="1" />
+    <div style="overflow-x:auto;">
+      <table class="input-table">
+        <thead>
+          <tr>
+            <th>학번</th>
+            <th>학업 성취도</th>
+            <th>활동1 성취기준</th>
+            <th>활동1</th>
+            <th>활동2 성취기준</th>
+            <th>활동2</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><input type="text" name="student_id" required /></td>
+            <td><input type="text" name="academic_achievement" /></td>
+            <td>
+              <select name="activity1_criterion" required>
+                {% for c in criteria %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+              </select>
+            </td>
+            <td><textarea name="activity1_text" required placeholder="활동1 관찰 자료"></textarea></td>
+            <td>
+              <select name="activity2_criterion" required>
+                {% for c in criteria %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+              </select>
+            </td>
+            <td><textarea name="activity2_text" required placeholder="활동2 관찰 자료"></textarea></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">활동1 + 활동2 결과를 합친 글자수가 {{ char_limit }}자(나이스 글자수 계산 기준)를 넘지 않도록 생성합니다.</p>
 
     <button type="submit" {% if not unlimited and remaining <= 0 %}disabled{% endif %}>생성하기</button>
   </form>
@@ -51,7 +68,14 @@
 {% if result %}
 <div class="card">
   <h3>생성 결과</h3>
-  <div class="result-box">{{ result }}</div>
+  {% if result.over_limit %}
+  <div class="error">합산 글자수 {{ result.total_count }}자로 목표 글자수({{ char_limit }}자)를 초과했습니다. 필요시 내용을 줄여서 다시 생성해 주세요.</div>
+  {% endif %}
+  <h4>활동1 <span class="tag">{{ result.activity1_count }}자</span></h4>
+  <div class="result-box">{{ result.activity1 }}</div>
+  <h4>활동2 <span class="tag">{{ result.activity2_count }}자</span></h4>
+  <div class="result-box">{{ result.activity2 }}</div>
+  <p class="muted">합산 글자수: <strong>{{ result.total_count }}</strong> / {{ char_limit }}자</p>
 </div>
 {% endif %}
 
@@ -60,7 +84,7 @@
   {% if history %}
   <table>
     <thead>
-      <tr><th>일시</th><th>학생</th><th>영역</th><th>결과</th></tr>
+      <tr><th>일시</th><th>학번</th><th>영역</th><th>결과</th></tr>
     </thead>
     <tbody>
       {% for item in history %}
@@ -82,6 +106,7 @@
   본 서비스는 결제 없이 운영됩니다. 서비스 운영에 도움을 주고 싶으시다면 후원 계좌/QR을 통해 자율적으로 후원하실 수 있습니다 (강제 아님).
 </div>
 
+{% if profile.role != "admin" %}
 <div class="card">
   <h3>계정 삭제</h3>
   <p class="muted">계정을 삭제하면 생성 이력을 포함한 모든 데이터가 즉시 완전히 삭제되며 복구할 수 없습니다.
@@ -90,5 +115,6 @@
     <button type="submit" class="danger">계정 완전 삭제</button>
   </form>
 </div>
+{% endif %}
 
 {% endblock %}
