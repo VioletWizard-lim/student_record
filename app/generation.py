@@ -267,6 +267,8 @@ async def dashboard(request: Request, current: CurrentUser = Depends(require_app
 
 
 HISTORY_SORT_FIELDS = {"created_at", "student_label", "category"}
+HISTORY_PAGE_SIZES = (10, 20, 100)
+DEFAULT_HISTORY_PAGE_SIZE = 20
 
 
 def _filter_history(history: list[dict], query: str) -> list[dict]:
@@ -292,18 +294,33 @@ def _sort_history(history: list[dict], sort: str, order: str) -> list[dict]:
     return sorted(history, key=lambda row: row.get(sort) or "", reverse=(order == "desc"))
 
 
+def _paginate_history(history: list[dict], page: int, page_size: int) -> tuple[list[dict], int, int]:
+    """(현재 페이지 항목, 보정된 페이지 번호, 전체 페이지 수)를 반환한다.
+    page가 1~total_pages 범위를 벗어나면 그 안으로 보정한다. page_size 자체의
+    유효성 검사(허용된 값인지)는 호출하는 라우트에서 미리 처리한다."""
+    total = len(history)
+    total_pages = max(1, -(-total // page_size))  # 올림 나눗셈
+    page = min(max(page, 1), total_pages)
+    start = (page - 1) * page_size
+    return history[start : start + page_size], page, total_pages
+
+
 @router.get("/history")
 async def history_page(
     request: Request,
     q: str = "",
     sort: str = "created_at",
     order: str = "desc",
+    page: int = 1,
+    page_size: int = DEFAULT_HISTORY_PAGE_SIZE,
     current: CurrentUser = Depends(require_approved),
 ):
     if sort not in HISTORY_SORT_FIELDS:
         sort = "created_at"
     if order not in ("asc", "desc"):
         order = "desc"
+    if page_size not in HISTORY_PAGE_SIZES:
+        page_size = DEFAULT_HISTORY_PAGE_SIZE
 
     client = get_user_client(current["access_token"])
     history = (
@@ -320,16 +337,24 @@ async def history_page(
     history = _filter_history(history, query)
     history = _sort_history(history, sort, order)
 
+    total = len(history)
+    page_items, page, total_pages = _paginate_history(history, page, page_size)
+
     return templates.TemplateResponse(
         request,
         "history.html",
         {
             "profile": current["profile"],
-            "history": history,
+            "history": page_items,
             "active_nav": "history",
             "q": query,
             "sort": sort,
             "order": order,
+            "page": page,
+            "page_size": page_size,
+            "page_sizes": HISTORY_PAGE_SIZES,
+            "total": total,
+            "total_pages": total_pages,
         },
     )
 
