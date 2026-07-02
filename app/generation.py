@@ -472,14 +472,21 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
                 },
                 messages=[{"role": "user", "content": user_prompt}],
             )
-            text = next(block.text for block in response.content if block.type == "text")
-            data = json.loads(text)
+            text_block = next((block for block in response.content if block.type == "text"), None)
+            if text_block is None:
+                raise RuntimeError(
+                    f"Claude 응답에서 결과 텍스트를 찾지 못했습니다 (stop_reason={response.stop_reason})."
+                )
+            data = json.loads(text_block.text)
             result_text = str(data["result"])
         except Exception as exc:
+            # 일부 예외(예: 빈 StopIteration)는 str()이 빈 문자열이라 메시지가
+            # 안 보일 수 있으므로, 비어 있으면 repr()로 대체해 항상 정보를 남긴다.
+            error_detail = str(exc) or repr(exc)
             results.append(
                 {
                     "student_id": student["student_id"],
-                    "error": f"생성 중 오류가 발생했습니다: {exc}",
+                    "error": f"생성 중 오류가 발생했습니다: {error_detail}",
                 }
             )
             continue
