@@ -89,7 +89,7 @@
     options.forEach(function (pair) {
       var opt = document.createElement('option');
       opt.value = pair[0];
-      opt.textContent = pair[0] + ' - ' + pair[1];
+      opt.textContent = pair[0];
       select.appendChild(opt);
     });
     if (options.some(function (pair) { return pair[0] === previousValue; })) {
