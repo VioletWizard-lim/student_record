@@ -22,8 +22,6 @@
   {% endif %}
 </div>
 
-{% if notice %}<div class="success">{{ notice }}</div>{% endif %}
-
 <div class="card">
   <h2>생기부 문구 생성</h2>
   <p class="muted">한 번에 최대 {{ max_students_per_batch }}명까지 학생을 추가해서 일괄 생성할 수 있습니다. 작성 중인 내용은 "임시저장"으로 서버에 저장해 뒀다가 나중에 이어서 작성할 수 있습니다.</p>
@@ -107,6 +105,7 @@
 
     <button type="submit" id="generate-submit-btn" {% if not unlimited and remaining <= 0 %}disabled{% endif %}>일괄 생성하기</button>
     <button type="submit" formaction="/draft/save" formnovalidate class="row-add">임시저장</button>
+    {% if notice %}<div class="success">{{ notice }}</div>{% endif %}
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
   </form>
 </div>
