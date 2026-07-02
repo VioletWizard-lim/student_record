@@ -3,8 +3,7 @@ name: Fly Deploy
 on:
   push:
     branches:
-      - claude/생기부도우미-claude-api-x4touo
-      # 기본 브랜치 이름을 main 등으로 바꾸면 위 브랜치명도 함께 수정하세요.
+      - main
   workflow_dispatch:
 
 jobs:
