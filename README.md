@@ -58,6 +58,8 @@ uvicorn app.main:app --reload --port 8080
 
 ## 4. Fly.io 배포 (도쿄 리전)
 
+### 최초 1회 설정
+
 ```bash
 fly launch --no-deploy   # fly.toml이 이미 있으므로 기존 설정을 사용하도록 선택
 fly secrets set \
@@ -66,10 +68,19 @@ fly secrets set \
   SUPABASE_SERVICE_ROLE_KEY=... \
   ANTHROPIC_API_KEY=... \
   SESSION_SECRET=...
-fly deploy
 ```
 
-`fly.toml`은 `primary_region = "nrt"`(도쿄), 헬스체크 경로 `/healthz`가 이미 설정되어 있습니다. 앱 이름이 이미 사용 중이면 `fly.toml`의 `app` 값을 원하는 이름으로 변경하세요.
+`fly secrets set`으로 등록한 값은 Fly.io 서버에 암호화되어 저장되며, 이후 배포(`fly deploy` 또는 GitHub Actions)에서 계속 유지되므로 매번 다시 등록할 필요가 없습니다. `fly.toml`은 `primary_region = "nrt"`(도쿄), 헬스체크 경로 `/healthz`가 이미 설정되어 있습니다. 앱 이름이 이미 사용 중이면 `fly.toml`의 `app` 값을 원하는 이름으로 변경하세요.
+
+### GitHub Actions 자동 배포
+
+`main` 브랜치(또는 저장소 기본 브랜치)에 push할 때마다 `.github/workflows/fly-deploy.yml` 워크플로우가 자동으로 `fly deploy`를 실행합니다.
+
+1. Fly.io 배포 토큰 발급: `fly tokens create deploy -x 999999h`
+2. GitHub 저장소 **Settings > Secrets and variables > Actions**에서 `FLY_API_TOKEN`이라는 이름으로 위 토큰 값을 등록합니다. (앱 자체의 `SUPABASE_*`, `ANTHROPIC_API_KEY` 등은 GitHub이 아니라 위 `fly secrets set`으로만 등록합니다.)
+3. 이후 브랜치에 push하면 자동으로 배포됩니다. 저장소 기본 브랜치 이름이 `main`이 아니라면 `.github/workflows/fly-deploy.yml`의 `branches:` 값을 실제 기본 브랜치명으로 맞춰주세요.
+
+수동 배포만 원한다면 워크플로우 파일을 삭제하고 로컬에서 `fly deploy`만 실행해도 됩니다.
 
 ## 5. 정책 요약
 
