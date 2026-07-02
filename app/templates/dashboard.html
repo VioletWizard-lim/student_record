@@ -94,16 +94,16 @@
 
     <div class="field-row">
       <div class="field field-narrow">
-        <label for="min_char_limit">목표 글자수 (최소)</label>
+        <label for="min_char_limit">목표 바이트 (최소)</label>
         <input type="number" id="min_char_limit" name="min_char_limit" min="1" max="{{ hard_max_char_limit }}" value="{{ min_char_limit }}" />
       </div>
       <div class="field field-narrow">
-        <label for="max_char_limit">목표 글자수 (최대)</label>
+        <label for="max_char_limit">목표 바이트 (최대)</label>
         <input type="number" id="max_char_limit" name="max_char_limit" min="1" max="{{ hard_max_char_limit }}" value="{{ max_char_limit }}" />
       </div>
     </div>
 
-    <p class="muted">학생별로 입력한 활동을 모두 종합해 하나의 세특 문단(나이스 글자수 계산 기준)으로 생성합니다. 목표 글자수는 이번에 생성하는 모든 학생에게 동일하게 적용되며, 최대 글자수는 {{ hard_max_char_limit }}자를 넘을 수 없습니다.</p>
+    <p class="muted">학생별로 입력한 활동을 모두 종합해 하나의 세특 문단(나이스 바이트 계산 기준)으로 생성합니다. 목표 바이트는 이번에 생성하는 모든 학생에게 동일하게 적용되며, 최대 바이트는 {{ hard_max_char_limit }}바이트를 넘을 수 없습니다.</p>
 
     <button type="submit" {% if not unlimited and remaining <= 0 %}disabled{% endif %}>일괄 생성하기</button>
     <button type="submit" formaction="/draft/save" formnovalidate class="row-add">임시저장</button>
@@ -233,11 +233,8 @@
     {% if item.error %}
     <div class="error">{{ item.error }}</div>
     {% else %}
-    {% if item.out_of_range %}
-    <div class="error">글자수 {{ item.count }}자로 목표 범위({{ item.min_char_limit }}~{{ item.max_char_limit }}자)를 벗어났습니다. 필요시 내용을 조정해 다시 생성해 주세요.</div>
-    {% endif %}
     <div class="result-box">{{ item.text }}</div>
-    <p class="muted">글자수: <strong>{{ item.count }}</strong> / {{ item.min_char_limit }}~{{ item.max_char_limit }}자</p>
+    <p class="muted">바이트: <strong>{{ item.count }}</strong> / {{ item.min_char_limit }}~{{ item.max_char_limit }}바이트</p>
     {% endif %}
   </div>
   {% endfor %}
@@ -257,7 +254,12 @@
         <td class="muted">{{ item.created_at[:16].replace("T", " ") }}</td>
         <td>{{ item.student_label }}</td>
         <td><span class="tag">{{ item.category or "-" }}</span></td>
-        <td>{{ item.output_text[:60] }}{% if item.output_text|length > 60 %}...{% endif %}</td>
+        <td>
+          <details class="history-result">
+            <summary>{{ item.output_text[:60] }}{% if item.output_text|length > 60 %}...{% endif %}</summary>
+            <div class="result-box">{{ item.output_text }}</div>
+          </details>
+        </td>
       </tr>
       {% endfor %}
     </tbody>

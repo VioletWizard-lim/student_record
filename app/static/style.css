@@ -290,6 +290,33 @@ th, td {
   padding: 16px;
 }
 
+.history-result summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.history-result summary::-webkit-details-marker {
+  display: none;
+}
+
+.history-result summary::before {
+  content: "▸ ";
+  color: var(--muted);
+}
+
+.history-result[open] summary::before {
+  content: "▾ ";
+}
+
+.history-result[open] summary {
+  white-space: normal;
+}
+
+.history-result .result-box {
+  margin-top: 8px;
+  max-width: 480px;
+}
+
 .tag {
   display: inline-block;
   font-size: 12px;
