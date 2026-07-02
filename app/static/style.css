@@ -207,6 +207,40 @@ th, td {
   background: var(--notice-bg);
 }
 
+.student-block {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-top: 16px;
+}
+
+.student-block:first-of-type {
+  margin-top: 8px;
+}
+
+.student-block-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0;
+}
+
+.result-item {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  margin-top: 14px;
+}
+
+.result-item:first-child {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.result-item h4 {
+  margin-bottom: 6px;
+}
+
 .muted {
   color: var(--muted);
   font-size: 13px;

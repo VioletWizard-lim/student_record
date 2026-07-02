@@ -1,6 +1,8 @@
 import json
+import re
 
 from fastapi import APIRouter, Depends, Request
+from starlette.datastructures import FormData
 
 from app.charcount import neis_char_count
 from app.config import settings
@@ -21,6 +23,9 @@ DEFAULT_MAX_CHAR_LIMIT = 700
 # (실제 나이스 입력 필드 제한, 한글 기준 약 3000바이트에 해당).
 HARD_MAX_CHAR_LIMIT = 1000
 MAX_ACTIVITIES = 10
+# 한 번에 처리할 수 있는 최대 학생 수 (요청 하나에 순차적으로 Claude API를
+# 여러 번 호출하므로, 처리 시간/비용을 고려해 상한을 둔다).
+MAX_STUDENTS_PER_BATCH = 20
 
 # 과목명을 프롬프트에 직접 넣으면 요청마다 시스템 프롬프트가 달라져 프롬프트
 # 캐싱이 깨지므로, 과목은 시스템 프롬프트가 아닌 사용자 프롬프트 쪽에 담는다.
@@ -35,6 +40,8 @@ SYSTEM_PROMPT = """당신은 대한민국 고등학교 교사입니다. 담당 �
 7. 입력된 활동이 여러 개이더라도 활동별로 나누어 쓰지 않고, 이를 모두 종합해 하나의 통일된 문단으로 작성합니다.
 8. 전체 글자수(나이스 글자수 계산 기준, 공백 포함)는 사용자가 지정한 최소/최대 글자수 범위를 지켜 작성합니다.
 9. 결과는 반드시 result라는 문자열 하나만 가진 JSON으로 출력하고, 다른 설명이나 머리말은 덧붙이지 않습니다."""
+
+STUDENT_ID_KEY_RE = re.compile(r"^student_id__(\d+)$")
 
 
 def _build_user_prompt(
@@ -77,7 +84,41 @@ def _clamp_char_limits(min_raw: str, max_raw: str) -> tuple[int, int] | None:
     return min_limit, max_limit
 
 
-def _dashboard_context(current: CurrentUser, error: str | None = None, result: dict | None = None) -> dict:
+def _parse_students(form: FormData) -> list[dict]:
+    """폼에서 student_id__0, subject__0, activity_criterion__0 ... 형태의
+    인덱스가 붙은 필드들을 학생별로 묶어낸다. 인덱스는 연속적이지 않아도 된다
+    (중간 학생을 화면에서 삭제해도 나머지 인덱스는 그대로 유지되므로)."""
+    indices = sorted(
+        int(match.group(1))
+        for key in form.keys()
+        for match in [STUDENT_ID_KEY_RE.match(key)]
+        if match
+    )
+    students = []
+    for index in indices[:MAX_STUDENTS_PER_BATCH]:
+        student_id = str(form.get(f"student_id__{index}", "")).strip()
+        subject = str(form.get(f"subject__{index}", "")).strip()
+        academic_achievement = str(form.get(f"academic_achievement__{index}", "")).strip()
+        criteria_values = form.getlist(f"activity_criterion__{index}")
+        text_values = form.getlist(f"activity_text__{index}")
+        activities = [
+            (str(criterion), str(text).strip())
+            for criterion, text in zip(criteria_values, text_values)
+            if str(text).strip()
+        ][:MAX_ACTIVITIES]
+        if student_id and subject in get_subjects() and activities:
+            students.append(
+                {
+                    "student_id": student_id,
+                    "subject": subject,
+                    "academic_achievement": academic_achievement,
+                    "activities": activities,
+                }
+            )
+    return students
+
+
+def _dashboard_context(current: CurrentUser, error: str | None = None, result: list[dict] | None = None) -> dict:
     client = get_user_client(current["access_token"])
     unlimited = _is_unlimited(current["profile"])
     status = ledger_status(get_service_client(), current["profile"]["email"])
@@ -105,6 +146,7 @@ def _dashboard_context(current: CurrentUser, error: str | None = None, result: d
         "default_min_char_limit": DEFAULT_MIN_CHAR_LIMIT,
         "default_max_char_limit": DEFAULT_MAX_CHAR_LIMIT,
         "hard_max_char_limit": HARD_MAX_CHAR_LIMIT,
+        "max_students_per_batch": MAX_STUDENTS_PER_BATCH,
         "used": used,
         "limit": settings.monthly_limit,
         "unlimited": unlimited,
@@ -126,25 +168,17 @@ async def dashboard(request: Request, current: CurrentUser = Depends(require_app
 @router.post("/generate")
 async def generate(request: Request, current: CurrentUser = Depends(require_approved)):
     form = await request.form()
-    student_id = str(form.get("student_id", "")).strip()
-    subject = str(form.get("subject", "")).strip()
-    academic_achievement = str(form.get("academic_achievement", "")).strip()
-    criteria_values = form.getlist("activity_criterion")
-    text_values = form.getlist("activity_text")
-    activities = [
-        (str(criterion), str(text).strip())
-        for criterion, text in zip(criteria_values, text_values)
-        if str(text).strip()
-    ][:MAX_ACTIVITIES]
+    students = _parse_students(form)
 
     char_limits = _clamp_char_limits(
         form.get("min_char_limit", str(DEFAULT_MIN_CHAR_LIMIT)),
         form.get("max_char_limit", str(DEFAULT_MAX_CHAR_LIMIT)),
     )
 
-    if not student_id or subject not in get_subjects() or not activities:
+    if not students:
         context = _dashboard_context(
-            current, error="학번, 과목, 최소 1개 이상의 활동 내용을 입력해 주세요."
+            current,
+            error="학생을 최소 1명 이상, 각 학생마다 학번/과목/활동 내용을 입력해 주세요.",
         )
         return templates.TemplateResponse(request, "dashboard.html", context)
 
@@ -162,16 +196,23 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
     service_client = get_service_client()
     status = ledger_status(service_client, current["profile"]["email"])
     used = status["used"]
+    unlimited = _is_unlimited(current["profile"])
 
-    if not _is_unlimited(current["profile"]) and used >= settings.monthly_limit:
+    if not unlimited and used + len(students) > settings.monthly_limit:
         context = _dashboard_context(
             current,
-            error=f"이번 주기 사용 한도({settings.monthly_limit}건)를 모두 사용했습니다. "
-            "다음 리셋일까지 생성 기능을 사용할 수 없습니다.",
+            error=f"이번 요청(학생 {len(students)}명)을 처리하면 사용 한도({settings.monthly_limit}건)를 "
+            f"초과합니다. 남은 한도는 {max(settings.monthly_limit - used, 0)}건입니다. "
+            "학생 수를 줄이거나 다음 리셋일까지 기다려 주세요.",
         )
         return templates.TemplateResponse(request, "dashboard.html", context)
 
-    if contains_rrn(student_id, academic_achievement, *[text for _, text in activities]):
+    pii_check_fields = []
+    for student in students:
+        pii_check_fields.append(student["student_id"])
+        pii_check_fields.append(student["academic_achievement"])
+        pii_check_fields.extend(text for _, text in student["activities"])
+    if contains_rrn(*pii_check_fields):
         context = _dashboard_context(
             current,
             error="입력 내용에 주민등록번호로 의심되는 패턴이 포함되어 있어 요청을 차단했습니다. "
@@ -189,65 +230,84 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
     from anthropic import Anthropic
 
     anthropic_client = Anthropic(api_key=settings.anthropic_api_key)
-    user_prompt = _build_user_prompt(
-        student_id, subject, academic_achievement, activities, min_char_limit, max_char_limit
-    )
+    results = []
 
-    try:
-        response = anthropic_client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=4096,
-            system=[
-                {
-                    "type": "text",
-                    "text": SYSTEM_PROMPT,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            output_config={
-                "format": {
-                    "type": "json_schema",
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "result": {"type": "string"},
-                        },
-                        "required": ["result"],
-                        "additionalProperties": False,
-                    },
-                }
-            },
-            messages=[{"role": "user", "content": user_prompt}],
+    for student in students:
+        user_prompt = _build_user_prompt(
+            student["student_id"],
+            student["subject"],
+            student["academic_achievement"],
+            student["activities"],
+            min_char_limit,
+            max_char_limit,
         )
-        text = next(block.text for block in response.content if block.type == "text")
-        data = json.loads(text)
-        result_text = str(data["result"])
-    except Exception as exc:
-        context = _dashboard_context(current, error=f"Claude API 호출 중 오류가 발생했습니다: {exc}")
-        return templates.TemplateResponse(request, "dashboard.html", context)
 
-    char_count = neis_char_count(result_text)
+        try:
+            response = anthropic_client.messages.create(
+                model=settings.anthropic_model,
+                max_tokens=4096,
+                system=[
+                    {
+                        "type": "text",
+                        "text": SYSTEM_PROMPT,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
+                output_config={
+                    "format": {
+                        "type": "json_schema",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "result": {"type": "string"},
+                            },
+                            "required": ["result"],
+                            "additionalProperties": False,
+                        },
+                    }
+                },
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            text = next(block.text for block in response.content if block.type == "text")
+            data = json.loads(text)
+            result_text = str(data["result"])
+        except Exception as exc:
+            results.append(
+                {
+                    "student_id": student["student_id"],
+                    "error": f"생성 중 오류가 발생했습니다: {exc}",
+                }
+            )
+            continue
 
-    client.table("generations").insert(
-        {
-            "user_id": current["user_id"],
-            "student_label": student_id,
-            "category": f"{subject} · 성취기준 " + "/".join(criterion for criterion, _ in activities),
-            "input_text": user_prompt,
-            "output_text": result_text,
-            "model": settings.anthropic_model,
-        }
-    ).execute()
+        char_count = neis_char_count(result_text)
 
-    if not _is_unlimited(current["profile"]):
-        record_generation(service_client, current["profile"]["email"], used)
+        client.table("generations").insert(
+            {
+                "user_id": current["user_id"],
+                "student_label": student["student_id"],
+                "category": f"{student['subject']} · 성취기준 "
+                + "/".join(criterion for criterion, _ in student["activities"]),
+                "input_text": user_prompt,
+                "output_text": result_text,
+                "model": settings.anthropic_model,
+            }
+        ).execute()
 
-    result = {
-        "text": result_text,
-        "count": char_count,
-        "min_char_limit": min_char_limit,
-        "max_char_limit": max_char_limit,
-        "out_of_range": char_count < min_char_limit or char_count > max_char_limit,
-    }
-    context = _dashboard_context(current, result=result)
+        if not unlimited:
+            record_generation(service_client, current["profile"]["email"], used)
+            used += 1
+
+        results.append(
+            {
+                "student_id": student["student_id"],
+                "text": result_text,
+                "count": char_count,
+                "min_char_limit": min_char_limit,
+                "max_char_limit": max_char_limit,
+                "out_of_range": char_count < min_char_limit or char_count > max_char_limit,
+            }
+        )
+
+    context = _dashboard_context(current, result=results)
     return templates.TemplateResponse(request, "dashboard.html", context)
