@@ -105,8 +105,8 @@
 
     <button type="submit" id="generate-submit-btn" {% if not unlimited and remaining <= 0 %}disabled{% endif %}>일괄 생성하기</button>
     <button type="submit" formaction="/draft/save" formnovalidate class="row-add">임시저장</button>
-    {% if notice %}<div class="success">{{ notice }}</div>{% endif %}
-    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    {% if notice %}<div id="server-notice" class="success" style="margin-top:16px;">{{ notice }}</div>{% endif %}
+    {% if error %}<div id="server-error" class="error" style="margin-top:16px;">{{ error }}</div>{% endif %}
   </form>
 </div>
 
@@ -114,6 +114,17 @@
   var SUBJECT_CRITERIA = {{ subject_criteria_json | safe }};
   var EXISTING_STUDENT_LABELS = {{ existing_student_labels_json | safe }};
   var nextStudentIndex = {{ next_student_index }};
+
+  // 임시저장/일괄 생성 제출 후 페이지가 새로고침되면 브라우저가 스크롤을
+  // 맨 위로 되돌리는데, 결과/오류 문구는 버튼 바로 아래(페이지 하단 쪽)에
+  // 있어 다시 스크롤해서 내려야 보였다. 페이지 로드 시 해당 문구가 있으면
+  // 바로 보이는 위치로 이동시킨다.
+  (function () {
+    var target = document.getElementById('server-notice') || document.getElementById('server-error');
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  })();
 
   function populateCriteriaSelect(select, subject) {
     var options = SUBJECT_CRITERIA[subject] || [];
