@@ -105,7 +105,7 @@
 
     <p class="muted">학생별로 입력한 활동을 모두 종합해 하나의 세특 문단(나이스 바이트 계산 기준)으로 생성합니다. 목표 바이트는 이번에 생성하는 모든 학생에게 동일하게 적용되며, 최대 바이트는 {{ hard_max_char_limit }}바이트를 넘을 수 없습니다.</p>
 
-    <button type="submit" {% if not unlimited and remaining <= 0 %}disabled{% endif %}>일괄 생성하기</button>
+    <button type="submit" id="generate-submit-btn" {% if not unlimited and remaining <= 0 %}disabled{% endif %}>일괄 생성하기</button>
     <button type="submit" formaction="/draft/save" formnovalidate class="row-add">임시저장</button>
   </form>
 </div>
@@ -118,6 +118,10 @@
     var options = SUBJECT_CRITERIA[subject] || [];
     var desiredValue = select.value || select.dataset.selected || '';
     select.innerHTML = '';
+    var placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '성취기준 선택';
+    select.appendChild(placeholder);
     options.forEach(function (pair) {
       var opt = document.createElement('option');
       opt.value = pair[0];
@@ -126,6 +130,8 @@
     });
     if (options.some(function (pair) { return pair[0] === desiredValue; })) {
       select.value = desiredValue;
+    } else {
+      select.value = '';
     }
     delete select.dataset.selected;
   }
@@ -143,9 +149,13 @@
     var rows = tbody.querySelectorAll('tr');
     var clone = rows[0].cloneNode(true);
     clone.querySelectorAll('textarea').forEach(function (t) { t.value = ''; });
+    // 새로 추가되는 활동은 이전 행에서 선택했던 성취기준을 그대로 물려받지
+    // 않도록 선택을 비운 상태로 시작한다(의도치 않은 중복 선택 방지).
+    var newCriteriaSelect = clone.querySelector('select[name^="activity_criterion__"]');
+    newCriteriaSelect.selectedIndex = -1;
     tbody.appendChild(clone);
     var subjectSelect = block.querySelector('select[name^="subject__"]');
-    populateCriteriaSelect(clone.querySelector('select[name^="activity_criterion__"]'), subjectSelect.value);
+    populateCriteriaSelect(newCriteriaSelect, subjectSelect.value);
   }
 
   function removeActivityRow(button) {
@@ -222,6 +232,15 @@
   document.querySelectorAll('.student-block').forEach(function (block) {
     onSubjectChange(block.querySelector('select[name^="subject__"]'));
   });
+
+  document.querySelector('form[action="/generate"]').addEventListener('submit', function (e) {
+    // 임시저장 버튼으로 제출된 경우에는 "생성 중" 표시를 하지 않는다.
+    if (e.submitter && e.submitter.getAttribute('formaction') === '/draft/save') return;
+    var btn = document.getElementById('generate-submit-btn');
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = '생성 중입니다... (학생 수에 따라 다소 시간이 걸릴 수 있습니다)';
+  });
 </script>
 
 {% if result %}
@@ -233,6 +252,12 @@
     {% if item.error %}
     <div class="error">{{ item.error }}</div>
     {% else %}
+    {% if item.duplicate_student %}
+    <div class="warning">이미 이전에 생성한 이력이 있는 학번입니다. 기존 이력을 덮어쓰지 않고 새 결과로 추가되었습니다.</div>
+    {% endif %}
+    {% if item.duplicate_criteria %}
+    <div class="warning">같은 성취기준을 여러 활동에 중복 선택했습니다. 의도한 것이 맞는지 확인해 주세요.</div>
+    {% endif %}
     <div class="result-box">{{ item.text }}</div>
     <p class="muted">바이트: <strong>{{ item.count }}</strong> / {{ item.min_char_limit }}~{{ item.max_char_limit }}바이트</p>
     {% endif %}

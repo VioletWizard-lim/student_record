@@ -71,14 +71,29 @@ header.topbar nav a {
   text-decoration: none;
   font-weight: 700;
   padding: 0 20px 16px;
+}
+
+.sidebar-user {
+  padding: 0 20px 16px;
   margin-bottom: 8px;
   border-bottom: 1px solid var(--border);
+}
+
+.sidebar-user .muted {
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.sidebar-user a {
+  color: var(--danger);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 13px;
 }
 
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  flex: 1;
 }
 
 .sidebar-nav a {
@@ -99,24 +114,6 @@ header.topbar nav a {
   color: var(--primary);
   border-left-color: var(--primary);
   background: var(--notice-bg);
-}
-
-.sidebar-footer {
-  padding: 16px 20px 0;
-  margin-top: 8px;
-  border-top: 1px solid var(--border);
-}
-
-.sidebar-footer .muted {
-  font-size: 13px;
-  margin-bottom: 6px;
-}
-
-.sidebar-footer a {
-  color: var(--danger);
-  text-decoration: none;
-  font-weight: 600;
-  font-size: 13px;
 }
 
 main.container {
@@ -223,6 +220,16 @@ button.danger, .btn.danger {
   border-radius: 10px;
   padding: 12px 16px;
   margin-bottom: 16px;
+}
+
+.warning {
+  background: #fff8e6;
+  border: 1px solid #f0d78c;
+  color: #8a6300;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: 13.5px;
 }
 
 .usage-widget {

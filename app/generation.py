@@ -25,6 +25,8 @@ MAX_ACTIVITIES = 10
 # 한 번에 처리할 수 있는 최대 학생 수 (요청 하나에 순차적으로 Claude API를
 # 여러 번 호출하므로, 처리 시간/비용을 고려해 상한을 둔다).
 MAX_STUDENTS_PER_BATCH = 20
+# 이력 페이지에서 검색/정렬 대상으로 불러오는 최대 건수.
+HISTORY_FETCH_LIMIT = 500
 
 # 과목명을 프롬프트에 직접 넣으면 요청마다 시스템 프롬프트가 달라져 프롬프트
 # 캐싱이 깨지므로, 과목은 시스템 프롬프트가 아닌 사용자 프롬프트 쪽에 담는다.
@@ -128,26 +130,37 @@ def _parse_students_raw(form: FormData) -> list[dict]:
     return students or [_empty_student()]
 
 
-def _parse_students(form: FormData) -> list[dict]:
+def _parse_students(form: FormData) -> tuple[list[dict], list[dict]]:
     """생성 요청용: 학번/과목/활동이 모두 채워진 학생만 골라, 활동을
-    (성취기준, 텍스트) 튜플 리스트로 변환한다."""
+    (성취기준, 텍스트) 튜플 리스트로 변환한다. 조건을 만족하지 못해 제외된
+    학생은 이유와 함께 두 번째 값(skipped)으로 따로 반환한다."""
     students = []
-    for raw in _parse_students_raw(form):
+    skipped = []
+    for position, raw in enumerate(_parse_students_raw(form), start=1):
+        label = raw["student_id"] or f"{position}번째 학생"
+        if not raw["student_id"]:
+            skipped.append({"label": label, "reason": "학번이 입력되지 않았습니다."})
+            continue
+        if raw["subject"] not in get_subjects():
+            skipped.append({"label": label, "reason": "과목이 선택되지 않았습니다."})
+            continue
         activities = [
             (activity["criterion"], activity["text"].strip())
             for activity in raw["activities"]
             if activity["text"].strip()
         ][:MAX_ACTIVITIES]
-        if raw["student_id"] and raw["subject"] in get_subjects() and activities:
-            students.append(
-                {
-                    "student_id": raw["student_id"],
-                    "subject": raw["subject"],
-                    "academic_achievement": raw["academic_achievement"],
-                    "activities": activities,
-                }
-            )
-    return students
+        if not activities:
+            skipped.append({"label": label, "reason": "활동 관찰 자료가 입력되지 않았습니다."})
+            continue
+        students.append(
+            {
+                "student_id": raw["student_id"],
+                "subject": raw["subject"],
+                "academic_achievement": raw["academic_achievement"],
+                "activities": activities,
+            }
+        )
+    return students, skipped
 
 
 def _load_draft(current: CurrentUser) -> dict | None:
@@ -226,22 +239,71 @@ async def dashboard(request: Request, current: CurrentUser = Depends(require_app
     return templates.TemplateResponse(request, "dashboard.html", context)
 
 
+HISTORY_SORT_FIELDS = {"created_at", "student_label", "category"}
+
+
+def _filter_history(history: list[dict], query: str) -> list[dict]:
+    """학번/영역/결과 내용에 검색어가 포함된 이력만 남긴다 (대소문자 무시)."""
+    query = query.strip()
+    if not query:
+        return history
+    needle = query.lower()
+    return [
+        row
+        for row in history
+        if needle in (row.get("student_label") or "").lower()
+        or needle in (row.get("category") or "").lower()
+        or needle in (row.get("output_text") or "").lower()
+    ]
+
+
+def _sort_history(history: list[dict], sort: str, order: str) -> list[dict]:
+    if sort not in HISTORY_SORT_FIELDS:
+        sort = "created_at"
+    if order not in ("asc", "desc"):
+        order = "desc"
+    return sorted(history, key=lambda row: row.get(sort) or "", reverse=(order == "desc"))
+
+
 @router.get("/history")
-async def history_page(request: Request, current: CurrentUser = Depends(require_approved)):
+async def history_page(
+    request: Request,
+    q: str = "",
+    sort: str = "created_at",
+    order: str = "desc",
+    current: CurrentUser = Depends(require_approved),
+):
+    if sort not in HISTORY_SORT_FIELDS:
+        sort = "created_at"
+    if order not in ("asc", "desc"):
+        order = "desc"
+
     client = get_user_client(current["access_token"])
     history = (
         client.table("generations")
         .select("*")
         .eq("user_id", current["user_id"])
         .order("created_at", desc=True)
-        .limit(50)
+        .limit(HISTORY_FETCH_LIMIT)
         .execute()
         .data
     )
+
+    query = q.strip()
+    history = _filter_history(history, query)
+    history = _sort_history(history, sort, order)
+
     return templates.TemplateResponse(
         request,
         "history.html",
-        {"profile": current["profile"], "history": history, "active_nav": "history"},
+        {
+            "profile": current["profile"],
+            "history": history,
+            "active_nav": "history",
+            "q": query,
+            "sort": sort,
+            "order": order,
+        },
     )
 
 
@@ -274,16 +336,21 @@ async def save_draft(request: Request, current: CurrentUser = Depends(require_ap
 async def generate(request: Request, current: CurrentUser = Depends(require_approved)):
     form = await request.form()
     raw_students = _parse_students_raw(form)
-    students = _parse_students(form)
+    students, skipped = _parse_students(form)
 
     min_char_raw = form.get("min_char_limit", str(DEFAULT_MIN_CHAR_LIMIT))
     max_char_raw = form.get("max_char_limit", str(DEFAULT_MAX_CHAR_LIMIT))
     char_limits = _clamp_char_limits(min_char_raw, max_char_raw)
 
     if not students:
+        if skipped:
+            reasons = "; ".join(f"{item['label']}: {item['reason']}" for item in skipped)
+            error_message = f"입력한 학생 정보가 올바르지 않아 생성할 수 없습니다. ({reasons})"
+        else:
+            error_message = "학생을 최소 1명 이상, 각 학생마다 학번/과목/활동 내용을 입력해 주세요."
         context = _dashboard_context(
             current,
-            error="학생을 최소 1명 이상, 각 학생마다 학번/과목/활동 내용을 입력해 주세요.",
+            error=error_message,
             students=raw_students,
             min_char_limit=min_char_raw,
             max_char_limit=max_char_raw,
@@ -353,7 +420,23 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
     anthropic_client = Anthropic(api_key=settings.anthropic_api_key)
     results = []
 
+    # 이미 생성 이력이 있는 학번을 다시 생성하면 기존 이력을 덮어쓰지 않고
+    # 새 이력으로 추가한다. 대신 결과 화면에서 경고를 표시할 수 있도록,
+    # 배치 처리 전 시점의 학번 목록을 미리 조회해 둔다(같은 배치 내 중복 포함).
+    existing_labels = {
+        row["student_label"]
+        for row in client.table("generations")
+        .select("student_label")
+        .eq("user_id", current["user_id"])
+        .execute()
+        .data
+    }
+
     for student in students:
+        criteria = [criterion for criterion, _ in student["activities"]]
+        duplicate_criteria = len(criteria) != len(set(criteria))
+        duplicate_student = student["student_id"] in existing_labels
+
         user_prompt = _build_user_prompt(
             student["student_id"],
             student["subject"],
@@ -403,6 +486,7 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
 
         char_count = neis_byte_count(result_text)
 
+        # 기존 이력을 덮어쓰지 않고 새 행으로 추가한다.
         client.table("generations").insert(
             {
                 "user_id": current["user_id"],
@@ -414,6 +498,7 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
                 "model": settings.anthropic_model,
             }
         ).execute()
+        existing_labels.add(student["student_id"])
 
         if not unlimited:
             record_generation(service_client, current["profile"]["email"], used)
@@ -426,11 +511,19 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
                 "count": char_count,
                 "min_char_limit": min_char_limit,
                 "max_char_limit": max_char_limit,
+                "duplicate_student": duplicate_student,
+                "duplicate_criteria": duplicate_criteria,
             }
         )
 
+    skip_error = None
+    if skipped:
+        reasons = "; ".join(f"{item['label']}: {item['reason']}" for item in skipped)
+        skip_error = f"다음 학생은 정보가 올바르지 않아 생성에서 제외되었습니다. ({reasons})"
+
     context = _dashboard_context(
         current,
+        error=skip_error,
         result=results,
         students=raw_students,
         min_char_limit=min_char_limit,

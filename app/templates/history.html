@@ -2,12 +2,32 @@
 {% block title %}생성 이력 - 생기부 도우미{% endblock %}
 {% block content %}
 
+{% macro sort_link(field, label) %}{% set next_order = 'asc' if sort == field and order == 'desc' else 'desc' %}<a href="/history?sort={{ field }}&order={{ next_order }}&q={{ q | urlencode }}">{{ label }}{% if sort == field %} {{ '▾' if order == 'desc' else '▴' }}{% endif %}</a>{% endmacro %}
+
 <div class="card">
   <h2>생성 이력</h2>
+  <form method="get" action="/history" class="field-row" style="align-items:flex-end; margin-bottom:16px;">
+    <div class="field">
+      <label for="q">검색</label>
+      <input type="text" id="q" name="q" value="{{ q }}" placeholder="학번, 영역, 결과 내용 검색" />
+    </div>
+    <input type="hidden" name="sort" value="{{ sort }}" />
+    <input type="hidden" name="order" value="{{ order }}" />
+    <div class="field field-narrow">
+      <button type="submit">검색</button>
+      {% if q %}<a class="btn" href="/history?sort={{ sort }}&order={{ order }}">초기화</a>{% endif %}
+    </div>
+  </form>
+
   {% if history %}
   <table>
     <thead>
-      <tr><th>일시</th><th>학번</th><th>영역</th><th>결과</th></tr>
+      <tr>
+        <th>{{ sort_link('created_at', '일시') }}</th>
+        <th>{{ sort_link('student_label', '학번') }}</th>
+        <th>{{ sort_link('category', '영역') }}</th>
+        <th>결과</th>
+      </tr>
     </thead>
     <tbody>
       {% for item in history %}
@@ -25,6 +45,8 @@
       {% endfor %}
     </tbody>
   </table>
+  {% elif q %}
+  <p class="muted">"{{ q }}"에 대한 검색 결과가 없습니다.</p>
   {% else %}
   <p class="muted">아직 생성 이력이 없습니다.</p>
   {% endif %}
