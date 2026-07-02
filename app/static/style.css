@@ -260,6 +260,10 @@ th, td {
   border-bottom: 1px solid var(--border);
 }
 
+th {
+  white-space: nowrap;
+}
+
 .input-table {
   min-width: 720px;
 }
