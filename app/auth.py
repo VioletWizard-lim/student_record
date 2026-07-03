@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.deps import CurrentUser, RedirectException, get_current_user, templates
 from app.supabase_client import get_anon_client, get_service_client
@@ -31,7 +32,7 @@ async def signup(
 
     client = get_anon_client()
     try:
-        result = client.auth.sign_up({"email": email, "password": password})
+        result = await run_in_threadpool(client.auth.sign_up, {"email": email, "password": password})
     except Exception as exc:
         return templates.TemplateResponse(
             request, "signup.html", {"error": f"가입에 실패했습니다: {exc}"}
@@ -39,9 +40,13 @@ async def signup(
 
     if display_name and result.user:
         try:
-            get_service_client().table("profiles").update(
-                {"display_name": display_name}
-            ).eq("id", result.user.id).execute()
+            await run_in_threadpool(
+                lambda: get_service_client()
+                .table("profiles")
+                .update({"display_name": display_name})
+                .eq("id", result.user.id)
+                .execute()
+            )
         except Exception:
             pass
 
@@ -77,7 +82,9 @@ async def login_page(request: Request):
 async def login(request: Request, email: str = Form(...), password: str = Form(...)):
     client = get_anon_client()
     try:
-        result = client.auth.sign_in_with_password({"email": email, "password": password})
+        result = await run_in_threadpool(
+            client.auth.sign_in_with_password, {"email": email, "password": password}
+        )
     except Exception:
         return templates.TemplateResponse(
             request,
@@ -119,12 +126,16 @@ async def delete_account(request: Request, current: CurrentUser = Depends(get_cu
 
     service = get_service_client()
     user_id = current["user_id"]
-    service.table("generations").delete().eq("user_id", user_id).execute()
-    service.table("profiles").delete().eq("id", user_id).execute()
-    try:
-        service.auth.admin.delete_user(user_id)
-    except Exception:
-        pass
+
+    def _delete_account_data():
+        service.table("generations").delete().eq("user_id", user_id).execute()
+        service.table("profiles").delete().eq("id", user_id).execute()
+        try:
+            service.auth.admin.delete_user(user_id)
+        except Exception:
+            pass
+
+    await run_in_threadpool(_delete_account_data)
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
 
