@@ -2,6 +2,7 @@ from typing import TypedDict
 
 from fastapi import HTTPException, Request
 from fastapi.templating import Jinja2Templates
+from starlette.concurrency import run_in_threadpool
 
 from app.supabase_client import get_user_client
 from app.timeutils import to_kst_display
@@ -34,7 +35,13 @@ async def get_current_user(request: Request) -> CurrentUser:
 
     client = get_user_client(access_token)
     try:
-        response = client.table("profiles").select("*").eq("id", user_id).single().execute()
+        # supabase-py는 동기(블로킹) 클라이언트라, 이 호출을 그대로 await 없이
+        # 실행하면 이 요청이 응답을 기다리는 동안 이벤트 루프 전체가 멈춰
+        # 다른 사용자의 요청도 함께 지연된다. 매 요청마다 거치는 인증
+        # 의존성이라 영향이 크므로 스레드풀로 넘긴다.
+        response = await run_in_threadpool(
+            lambda: client.table("profiles").select("*").eq("id", user_id).single().execute()
+        )
     except Exception:
         request.session.clear()
         raise RedirectException("/login")

@@ -2,6 +2,7 @@ import json
 import re
 
 from fastapi import APIRouter, Depends, Request
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import FormData
 
 from app.charcount import neis_byte_count
@@ -284,7 +285,10 @@ def _dashboard_context(
 
 @router.get("/dashboard")
 async def dashboard(request: Request, current: CurrentUser = Depends(require_approved)):
-    context = _dashboard_context(current)
+    # _dashboard_context 안에서 Supabase를 여러 번(사용량/이력/임시저장) 동기
+    # 호출하므로, 전체를 스레드풀로 넘겨 이벤트 루프가 그동안 다른 요청을
+    # 처리할 수 있게 한다.
+    context = await run_in_threadpool(_dashboard_context, current)
     return templates.TemplateResponse(request, "dashboard.html", context)
 
 
@@ -360,15 +364,20 @@ async def history_page(
         subject = ""
 
     client = get_user_client(current["access_token"])
-    history = (
-        client.table("generations")
-        .select("*")
-        .eq("user_id", current["user_id"])
-        .order("created_at", desc=True)
-        .limit(HISTORY_FETCH_LIMIT)
-        .execute()
-        .data
-    )
+
+    def _fetch_history():
+        return (
+            client.table("generations")
+            .select("*")
+            .eq("user_id", current["user_id"])
+            .order("created_at", desc=True)
+            .limit(HISTORY_FETCH_LIMIT)
+            .execute()
+            .data
+        )
+
+    # Supabase 동기 호출을 스레드풀로 넘겨 이벤트 루프를 막지 않는다.
+    history = await run_in_threadpool(_fetch_history)
 
     query = q.strip()
     history = _filter_history(history, query)
@@ -412,9 +421,14 @@ async def save_draft(request: Request, current: CurrentUser = Depends(require_ap
         "max_char_limit": max_char_raw,
     }
     client = get_user_client(current["access_token"])
-    client.table("drafts").upsert({"user_id": current["user_id"], "data": draft_data}).execute()
+    await run_in_threadpool(
+        lambda: client.table("drafts")
+        .upsert({"user_id": current["user_id"], "data": draft_data})
+        .execute()
+    )
 
-    context = _dashboard_context(
+    context = await run_in_threadpool(
+        _dashboard_context,
         current,
         notice="임시저장되었습니다.",
         students=raw_students,
@@ -422,6 +436,115 @@ async def save_draft(request: Request, current: CurrentUser = Depends(require_ap
         max_char_limit=max_char_raw,
     )
     return templates.TemplateResponse(request, "dashboard.html", context)
+
+
+def _generate_and_record_result(
+    anthropic_client,
+    client,
+    service_client,
+    current: CurrentUser,
+    student: dict,
+    user_prompt: str,
+    min_char_limit: int,
+    max_char_limit: int,
+    duplicate_student: bool,
+    unlimited: bool,
+    used: int,
+) -> dict:
+    """한 학생에 대해 Claude 호출(+분량 재시도) → 결과 저장 → 사용량 기록까지
+    한 번에 처리하는 동기 함수. 학생 1명당 최대 MAX_LENGTH_RETRIES+1회의
+    Claude API 호출 + Supabase 쓰기가 일어나는, 이 라우트에서 가장 오래
+    걸리는 블로킹 구간이라 스레드풀로 통째로 넘기기 위해 분리했다.
+    실패 시 {"student_id":..., "error":...}를, 성공 시 결과 dict를 반환한다."""
+    messages = [{"role": "user", "content": user_prompt}]
+
+    try:
+        for attempt in range(MAX_LENGTH_RETRIES + 1):
+            response = anthropic_client.messages.create(
+                model=settings.anthropic_model,
+                # thinking을 꺼서 사고 과정에 토큰을 쓰지 않으므로, 결과 텍스트
+                # (최대 HARD_MAX_CHAR_LIMIT 바이트)만 감당하면 되는 수준으로
+                # max_tokens를 잡는다. 한글은 바이트당 토큰 수가 영어보다 크므로
+                # 여유를 두었다.
+                max_tokens=4000,
+                thinking={"type": "disabled"},
+                system=[
+                    {
+                        "type": "text",
+                        "text": SYSTEM_PROMPT,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
+                output_config={
+                    "format": {
+                        "type": "json_schema",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "result": {"type": "string"},
+                            },
+                            "required": ["result"],
+                            "additionalProperties": False,
+                        },
+                    }
+                },
+                messages=messages,
+            )
+            text_block = next((block for block in response.content if block.type == "text"), None)
+            if text_block is None:
+                raise RuntimeError(
+                    f"Claude 응답에서 결과 텍스트를 찾지 못했습니다 (stop_reason={response.stop_reason})."
+                )
+            data = json.loads(text_block.text)
+            result_text = str(data["result"])
+            char_count = neis_byte_count(result_text)
+
+            if min_char_limit <= char_count <= max_char_limit or attempt == MAX_LENGTH_RETRIES:
+                break
+
+            # 목표 바이트 범위를 벗어났으면, 같은 대화를 이어가며 분량만
+            # 조정해 다시 작성해 달라고 요청한다(활동 내용을 다시 보낼
+            # 필요 없이 직전 결과를 근거로 삼아 조정).
+            messages.append({"role": "assistant", "content": text_block.text})
+            messages.append(
+                {
+                    "role": "user",
+                    "content": _build_length_retry_prompt(char_count, min_char_limit, max_char_limit),
+                }
+            )
+    except Exception as exc:
+        # 일부 예외(예: 빈 StopIteration)는 str()이 빈 문자열이라 메시지가
+        # 안 보일 수 있으므로, 비어 있으면 repr()로 대체해 항상 정보를 남긴다.
+        error_detail = str(exc) or repr(exc)
+        return {
+            "student_id": student["student_id"],
+            "error": f"생성 중 오류가 발생했습니다: {error_detail}",
+        }
+
+    # 기존 이력을 덮어쓰지 않고 새 행으로 추가한다.
+    client.table("generations").insert(
+        {
+            "user_id": current["user_id"],
+            "student_label": student["student_id"],
+            "category": f"{student['subject']} · 성취기준 "
+            + "/".join(criterion for criterion, _ in student["activities"]),
+            "input_text": user_prompt,
+            "output_text": result_text,
+            "model": settings.anthropic_model,
+        }
+    ).execute()
+
+    if not unlimited:
+        record_generation(service_client, current["profile"]["email"], used)
+
+    return {
+        "student_id": student["student_id"],
+        "text": result_text,
+        "count": char_count,
+        "min_char_limit": min_char_limit,
+        "max_char_limit": max_char_limit,
+        "duplicate_student": duplicate_student,
+    }
 
 
 @router.post("/generate")
@@ -440,7 +563,8 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
             error_message = f"입력한 학생 정보가 올바르지 않아 생성할 수 없습니다. ({reasons})"
         else:
             error_message = "학생을 최소 1명 이상, 각 학생마다 학번/과목/활동 내용을 입력해 주세요."
-        context = _dashboard_context(
+        context = await run_in_threadpool(
+            _dashboard_context,
             current,
             error=error_message,
             students=raw_students,
@@ -450,7 +574,8 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
         return templates.TemplateResponse(request, "dashboard.html", context)
 
     if char_limits is None:
-        context = _dashboard_context(
+        context = await run_in_threadpool(
+            _dashboard_context,
             current,
             error=f"바이트 설정이 올바르지 않습니다. 최대 바이트는 {HARD_MAX_CHAR_LIMIT}바이트를 넘을 수 없고, "
             "최소 바이트는 최대 바이트보다 작아야 합니다.",
@@ -464,13 +589,14 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
 
     client = get_user_client(current["access_token"])
     service_client = get_service_client()
-    status = ledger_status(service_client, current["profile"]["email"])
+    status = await run_in_threadpool(ledger_status, service_client, current["profile"]["email"])
     used = status["used"]
     limit = status["monthly_limit"]
     unlimited = _is_unlimited(current["profile"])
 
     if not unlimited and used + len(students) > limit:
-        context = _dashboard_context(
+        context = await run_in_threadpool(
+            _dashboard_context,
             current,
             error=f"이번 요청(학생 {len(students)}명)을 처리하면 사용 한도({limit}건)를 "
             f"초과합니다. 남은 한도는 {max(limit - used, 0)}건입니다. "
@@ -487,7 +613,8 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
         pii_check_fields.append(student["academic_achievement"])
         pii_check_fields.extend(text for _, text in student["activities"])
     if contains_rrn(*pii_check_fields):
-        context = _dashboard_context(
+        context = await run_in_threadpool(
+            _dashboard_context,
             current,
             error="입력 내용에 주민등록번호로 의심되는 패턴이 포함되어 있어 요청을 차단했습니다. "
             "민감정보를 제거한 뒤 다시 시도해 주세요.",
@@ -498,7 +625,8 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
         return templates.TemplateResponse(request, "dashboard.html", context)
 
     if not settings.anthropic_api_key:
-        context = _dashboard_context(
+        context = await run_in_threadpool(
+            _dashboard_context,
             current,
             error="관리자가 아직 Anthropic API 키를 설정하지 않았습니다. 잠시 후 다시 시도해 주세요.",
             students=raw_students,
@@ -515,7 +643,7 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
     # 이미 생성 이력이 있는 학번을 다시 생성하면 기존 이력을 덮어쓰지 않고
     # 새 이력으로 추가한다. 대신 결과 화면에서 경고를 표시할 수 있도록,
     # 배치 처리 전 시점의 학번 목록을 미리 조회해 둔다(같은 배치 내 중복 포함).
-    existing_labels = _existing_student_labels(current)
+    existing_labels = await run_in_threadpool(_existing_student_labels, current)
 
     for student in students:
         duplicate_student = student["student_id"] in existing_labels
@@ -529,109 +657,39 @@ async def generate(request: Request, current: CurrentUser = Depends(require_appr
             max_char_limit,
         )
 
-        messages = [{"role": "user", "content": user_prompt}]
-
-        try:
-            for attempt in range(MAX_LENGTH_RETRIES + 1):
-                response = anthropic_client.messages.create(
-                    model=settings.anthropic_model,
-                    # thinking을 꺼서 사고 과정에 토큰을 쓰지 않으므로, 결과 텍스트
-                    # (최대 HARD_MAX_CHAR_LIMIT 바이트)만 감당하면 되는 수준으로
-                    # max_tokens를 잡는다. 한글은 바이트당 토큰 수가 영어보다 크므로
-                    # 여유를 두었다.
-                    max_tokens=4000,
-                    thinking={"type": "disabled"},
-                    system=[
-                        {
-                            "type": "text",
-                            "text": SYSTEM_PROMPT,
-                            "cache_control": {"type": "ephemeral"},
-                        }
-                    ],
-                    output_config={
-                        "format": {
-                            "type": "json_schema",
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "result": {"type": "string"},
-                                },
-                                "required": ["result"],
-                                "additionalProperties": False,
-                            },
-                        }
-                    },
-                    messages=messages,
-                )
-                text_block = next((block for block in response.content if block.type == "text"), None)
-                if text_block is None:
-                    raise RuntimeError(
-                        f"Claude 응답에서 결과 텍스트를 찾지 못했습니다 (stop_reason={response.stop_reason})."
-                    )
-                data = json.loads(text_block.text)
-                result_text = str(data["result"])
-                char_count = neis_byte_count(result_text)
-
-                if min_char_limit <= char_count <= max_char_limit or attempt == MAX_LENGTH_RETRIES:
-                    break
-
-                # 목표 바이트 범위를 벗어났으면, 같은 대화를 이어가며 분량만
-                # 조정해 다시 작성해 달라고 요청한다(활동 내용을 다시 보낼
-                # 필요 없이 직전 결과를 근거로 삼아 조정).
-                messages.append({"role": "assistant", "content": text_block.text})
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": _build_length_retry_prompt(char_count, min_char_limit, max_char_limit),
-                    }
-                )
-        except Exception as exc:
-            # 일부 예외(예: 빈 StopIteration)는 str()이 빈 문자열이라 메시지가
-            # 안 보일 수 있으므로, 비어 있으면 repr()로 대체해 항상 정보를 남긴다.
-            error_detail = str(exc) or repr(exc)
-            results.append(
-                {
-                    "student_id": student["student_id"],
-                    "error": f"생성 중 오류가 발생했습니다: {error_detail}",
-                }
-            )
-            continue
-
-        # 기존 이력을 덮어쓰지 않고 새 행으로 추가한다.
-        client.table("generations").insert(
-            {
-                "user_id": current["user_id"],
-                "student_label": student["student_id"],
-                "category": f"{student['subject']} · 성취기준 "
-                + "/".join(criterion for criterion, _ in student["activities"]),
-                "input_text": user_prompt,
-                "output_text": result_text,
-                "model": settings.anthropic_model,
-            }
-        ).execute()
-        existing_labels.add(student["student_id"])
-
-        if not unlimited:
-            record_generation(service_client, current["profile"]["email"], used)
-            used += 1
-
-        results.append(
-            {
-                "student_id": student["student_id"],
-                "text": result_text,
-                "count": char_count,
-                "min_char_limit": min_char_limit,
-                "max_char_limit": max_char_limit,
-                "duplicate_student": duplicate_student,
-            }
+        # 학생 1명당 최대 MAX_LENGTH_RETRIES+1회의 Claude API 호출과
+        # Supabase 쓰기가 일어나는 구간을 스레드풀로 넘긴다. 학생 수만큼
+        # 여전히 순차 처리되지만(기존과 동일한 처리 순서), 각 호출이 진행되는
+        # 동안 이벤트 루프가 막히지 않아 다른 사용자의 요청을 함께 처리할 수
+        # 있다.
+        result_item = await run_in_threadpool(
+            _generate_and_record_result,
+            anthropic_client,
+            client,
+            service_client,
+            current,
+            student,
+            user_prompt,
+            min_char_limit,
+            max_char_limit,
+            duplicate_student,
+            unlimited,
+            used,
         )
+        results.append(result_item)
+
+        if "error" not in result_item:
+            existing_labels.add(student["student_id"])
+            if not unlimited:
+                used += 1
 
     skip_error = None
     if skipped:
         reasons = "; ".join(f"{item['label']}: {item['reason']}" for item in skipped)
         skip_error = f"다음 학생은 정보가 올바르지 않아 생성에서 제외되었습니다. ({reasons})"
 
-    context = _dashboard_context(
+    context = await run_in_threadpool(
+        _dashboard_context,
         current,
         error=skip_error,
         result=results,

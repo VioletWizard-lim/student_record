@@ -13,7 +13,10 @@ primary_region = "nrt"
   force_https = true
   auto_stop_machines = true
   auto_start_machines = true
-  min_machines_running = 0
+  # 0이면 트래픽이 없을 때 머신이 완전히 꺼져, 다음 접속자가 콜드 스타트를
+  # 감수해야 한다(첫 로딩이 느려짐). 1로 두면 항상 1대는 켜져 있어 콜드
+  # 스타트가 사라지는 대신 Fly.io 비용이 계속 발생한다.
+  min_machines_running = 1
 
   [[http_service.checks]]
     interval = "30s"
