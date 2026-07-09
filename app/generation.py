@@ -73,6 +73,23 @@ def _build_user_prompt(
     return "\n".join(lines)
 
 
+# 목표 범위를 살짝 벗어나도 재시도 없이 받아들이는 허용 오차(최대 바이트 기준
+# 비율). 재시도 1회마다 API 호출이 그대로 늘어나므로(비용 상승), 큰 목표
+# 바이트에서 범위를 근소하게 벗어난 경우까지 매번 다시 쓰게 하면 비용 대비
+# 이득이 적다.
+LENGTH_TOLERANCE_RATIO = 0.05
+
+
+def _is_length_acceptable(char_count: int, min_char_limit: int, max_char_limit: int) -> bool:
+    """목표 범위 안이거나, 허용 오차(LENGTH_TOLERANCE_RATIO) 이내로 벗어났으면
+    재시도 없이 받아들인다. 상한은 나이스 입력 필드 제한(HARD_MAX_CHAR_LIMIT)을
+    넘지 않도록 클램프한다."""
+    tolerance = max(1, round(max_char_limit * LENGTH_TOLERANCE_RATIO))
+    lower = max(1, min_char_limit - tolerance)
+    upper = min(max_char_limit + tolerance, HARD_MAX_CHAR_LIMIT)
+    return lower <= char_count <= upper
+
+
 def _build_length_retry_prompt(char_count: int, min_char_limit: int, max_char_limit: int) -> str:
     """직전 결과가 목표 바이트 범위를 벗어났을 때, 같은 대화의 다음 사용자
     메시지로 보낼 재작성 요청 문구를 만든다."""
@@ -499,12 +516,12 @@ def _generate_and_record_result(
             result_text = str(data["result"])
             char_count = neis_byte_count(result_text)
 
-            if min_char_limit <= char_count <= max_char_limit or attempt == MAX_LENGTH_RETRIES:
+            if _is_length_acceptable(char_count, min_char_limit, max_char_limit) or attempt == MAX_LENGTH_RETRIES:
                 break
 
-            # 목표 바이트 범위를 벗어났으면, 같은 대화를 이어가며 분량만
-            # 조정해 다시 작성해 달라고 요청한다(활동 내용을 다시 보낼
-            # 필요 없이 직전 결과를 근거로 삼아 조정).
+            # 목표 바이트 범위를 허용 오차 이상으로 벗어났으면, 같은 대화를
+            # 이어가며 분량만 조정해 다시 작성해 달라고 요청한다(활동 내용을
+            # 다시 보낼 필요 없이 직전 결과를 근거로 삼아 조정).
             messages.append({"role": "assistant", "content": text_block.text})
             messages.append(
                 {
