@@ -16,7 +16,25 @@ def test_parses_single_student():
     students, skipped = _parse_students(form)
     assert len(students) == 1
     assert students[0]["student_id"] == "10101"
-    assert students[0]["activities"] == [("12정01-01", "관찰 내용 1")]
+    assert students[0]["activities"] == [(["12정01-01"], "관찰 내용 1")]
+    assert skipped == []
+
+
+def test_parses_activity_with_multiple_criteria():
+    # 활동 1개에 성취기준을 여러 개 선택하면, 화면(JS)에서 콤마로 이어붙여
+    # 보내온다.
+    form = FormData(
+        [
+            ("student_id__0", "10101"),
+            ("subject__0", "정보"),
+            ("academic_achievement__0", "A"),
+            ("activity_criterion__0", "12정01-01,12정01-02"),
+            ("activity_text__0", "관찰 내용 1"),
+        ]
+    )
+    students, skipped = _parse_students(form)
+    assert len(students) == 1
+    assert students[0]["activities"] == [(["12정01-01", "12정01-02"], "관찰 내용 1")]
     assert skipped == []
 
 
@@ -54,6 +72,22 @@ def test_skips_student_with_no_activities():
     students, skipped = _parse_students(form)
     assert students == []
     assert skipped == [{"label": "10101", "reason": "활동 관찰 자료가 입력되지 않았습니다."}]
+
+
+def test_skips_student_with_activity_missing_criteria():
+    # 관찰 자료는 입력했지만 성취기준을 하나도 선택하지 않은 경우.
+    form = FormData(
+        [
+            ("student_id__0", "10101"),
+            ("subject__0", "정보"),
+            ("academic_achievement__0", "A"),
+            ("activity_criterion__0", ""),
+            ("activity_text__0", "관찰 내용 1"),
+        ]
+    )
+    students, skipped = _parse_students(form)
+    assert students == []
+    assert skipped == [{"label": "10101", "reason": "각 활동마다 성취기준을 1개 이상 선택해야 합니다."}]
 
 
 def test_skips_student_with_invalid_subject():
@@ -125,6 +159,26 @@ def test_skips_student_with_duplicate_criteria():
     assert "중복" in skipped[0]["reason"]
 
 
+def test_skips_student_with_duplicate_criteria_across_multi_select_activities():
+    # 활동1에서 복수 선택한 성취기준 중 하나가 활동2에서 또 선택된 경우도
+    # 중복으로 잡아야 한다.
+    form = FormData(
+        [
+            ("student_id__0", "10101"),
+            ("subject__0", "정보"),
+            ("academic_achievement__0", "A"),
+            ("activity_criterion__0", "12정01-01,12정01-02"),
+            ("activity_text__0", "관찰 내용 1"),
+            ("activity_criterion__0", "12정01-02"),
+            ("activity_text__0", "관찰 내용 2"),
+        ]
+    )
+    students, skipped = _parse_students(form)
+    assert students == []
+    assert len(skipped) == 1
+    assert "중복" in skipped[0]["reason"]
+
+
 def test_raw_parse_keeps_incomplete_student_for_draft():
     # 임시저장 시에는 비어 있거나 잘못된 값도 그대로 보존해야 한다.
     form = FormData(
@@ -141,7 +195,7 @@ def test_raw_parse_keeps_incomplete_student_for_draft():
     assert students[0]["index"] == 0
     assert students[0]["student_id"] == "10101"
     assert students[0]["subject"] == ""
-    assert students[0]["activities"] == [{"criterion": "12정01-01", "text": ""}]
+    assert students[0]["activities"] == [{"criteria": ["12정01-01"], "text": ""}]
 
 
 def test_raw_parse_empty_form_returns_single_empty_student():
