@@ -55,15 +55,16 @@ def _build_user_prompt(
     student_id: str,
     subject: str,
     academic_achievement: str,
-    activities: list[tuple[str, str]],
+    activities: list[tuple[list[str], str]],
     min_char_limit: int,
     max_char_limit: int,
 ) -> str:
     lines = [f"학번: {student_id}", f"담당 교과목: {subject}"]
     if academic_achievement:
         lines.append(f"교과 성취 수준: {academic_achievement}")
-    for index, (criterion, text) in enumerate(activities, start=1):
-        lines.append(f"[활동{index}] 성취기준: {criterion_label(subject, criterion)}")
+    for index, (criteria, text) in enumerate(activities, start=1):
+        labels = ", ".join(criterion_label(subject, criterion) for criterion in criteria)
+        lines.append(f"[활동{index}] 성취기준: {labels}")
         lines.append(f"[활동{index}] 관찰 자료: {text}")
     lines.append(
         f"\n위 교과 성취 수준과 활동 {len(activities)}개의 관찰 자료를 모두 반영해, "
@@ -130,7 +131,7 @@ def _empty_student(index: int = 0) -> dict:
         "student_id": "",
         "subject": "",
         "academic_achievement": "",
-        "activities": [{"criterion": "", "text": ""}, {"criterion": "", "text": ""}],
+        "activities": [{"criteria": [], "text": ""}, {"criteria": [], "text": ""}],
     }
 
 
@@ -151,10 +152,12 @@ def _parse_students_raw(form: FormData) -> list[dict]:
     )
     students = []
     for index in indices[:MAX_STUDENTS_PER_BATCH]:
+        # 활동 1개당 성취기준을 여러 개 선택할 수 있어, 화면(JS)에서 콤마로
+        # 이어붙인 문자열 하나로 보내온다. 여기서 다시 리스트로 풀어낸다.
         criteria_values = form.getlist(f"activity_criterion__{index}")
         text_values = form.getlist(f"activity_text__{index}")
         activities = [
-            {"criterion": str(criterion), "text": str(text)}
+            {"criteria": [c for c in str(criterion).split(",") if c], "text": str(text)}
             for criterion, text in zip(criteria_values, text_values)
         ][:MAX_ACTIVITIES]
         students.append(
@@ -163,7 +166,7 @@ def _parse_students_raw(form: FormData) -> list[dict]:
                 "student_id": str(form.get(f"student_id__{index}", "")).strip(),
                 "subject": str(form.get(f"subject__{index}", "")).strip(),
                 "academic_achievement": str(form.get(f"academic_achievement__{index}", "")).strip(),
-                "activities": activities or [{"criterion": "", "text": ""}],
+                "activities": activities or [{"criteria": [], "text": ""}],
             }
         )
     return students or [_empty_student()]
@@ -184,15 +187,18 @@ def _parse_students(form: FormData) -> tuple[list[dict], list[dict]]:
             skipped.append({"label": label, "reason": "과목이 선택되지 않았습니다."})
             continue
         activities = [
-            (activity["criterion"], activity["text"].strip())
+            (activity["criteria"], activity["text"].strip())
             for activity in raw["activities"]
             if activity["text"].strip()
         ][:MAX_ACTIVITIES]
         if not activities:
             skipped.append({"label": label, "reason": "활동 관찰 자료가 입력되지 않았습니다."})
             continue
-        criteria = [criterion for criterion, _ in activities]
-        if len(criteria) != len(set(criteria)):
+        if any(not criteria for criteria, _ in activities):
+            skipped.append({"label": label, "reason": "각 활동마다 성취기준을 1개 이상 선택해야 합니다."})
+            continue
+        all_criteria = [criterion for criteria, _ in activities for criterion in criteria]
+        if len(all_criteria) != len(set(all_criteria)):
             skipped.append(
                 {
                     "label": label,
@@ -544,7 +550,7 @@ def _generate_and_record_result(
             "user_id": current["user_id"],
             "student_label": student["student_id"],
             "category": f"{student['subject']} · 성취기준 "
-            + "/".join(criterion for criterion, _ in student["activities"]),
+            + "/".join(criterion for criteria, _ in student["activities"] for criterion in criteria),
             "input_text": user_prompt,
             "output_text": result_text,
             "model": settings.anthropic_model,

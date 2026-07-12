@@ -58,7 +58,7 @@
             </div>
           </div>
 
-          <label>활동별 성취기준 및 관찰 자료</label>
+          <label>활동별 성취기준(복수 선택 가능) 및 관찰 자료</label>
           <div style="overflow-x:auto;">
             <table class="input-table">
               <thead>
@@ -71,7 +71,10 @@
               <tbody class="activity-rows">
                 {% for activity in student.activities %}
                 <tr>
-                  <td><select name="activity_criterion__{{ student.index }}" class="criterion-select" data-selected="{{ activity.criterion }}" required></select></td>
+                  <td>
+                    <select multiple size="4" class="criterion-select" data-selected="{{ activity.criteria | join(',') }}" onchange="syncCriterionHiddenInput(this)"></select>
+                    <input type="hidden" name="activity_criterion__{{ student.index }}" class="criterion-hidden" value="{{ activity.criteria | join(',') }}" />
+                  </td>
                   <td><textarea name="activity_text__{{ student.index }}" required placeholder="활동 관찰 자료">{{ activity.text }}</textarea></td>
                   <td><button type="button" class="danger row-remove" onclick="removeActivityRow(this)">삭제</button></td>
                 </tr>
@@ -126,31 +129,39 @@
     }
   })();
 
+  function syncCriterionHiddenInput(select) {
+    // 화면에는 복수 선택 가능한 select를 보여주고, 실제 폼 전송은 같은 행의
+    // hidden input이 담당한다(콤마로 이어붙인 문자열). select 자체를
+    // 제출하면 같은 학생 안의 다른 활동 select와 값이 뒤섞여 어느 활동의
+    // 성취기준인지 구분할 수 없기 때문이다.
+    var hidden = select.parentElement.querySelector('.criterion-hidden');
+    if (!hidden) return;
+    var values = Array.prototype.filter
+      .call(select.options, function (opt) { return opt.selected; })
+      .map(function (opt) { return opt.value; });
+    hidden.value = values.join(',');
+  }
+
   function populateCriteriaSelect(select, subject) {
     var options = SUBJECT_CRITERIA[subject] || [];
-    var desiredValue = select.value || select.dataset.selected || '';
+    var desiredValues = (select.dataset.selected || '').split(',').filter(Boolean);
     select.innerHTML = '';
-    var placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = '성취기준 선택';
-    select.appendChild(placeholder);
     options.forEach(function (pair) {
       var opt = document.createElement('option');
       opt.value = pair[0];
       opt.textContent = pair[0];
+      if (desiredValues.indexOf(pair[0]) !== -1) {
+        opt.selected = true;
+      }
       select.appendChild(opt);
     });
-    if (options.some(function (pair) { return pair[0] === desiredValue; })) {
-      select.value = desiredValue;
-    } else {
-      select.value = '';
-    }
     delete select.dataset.selected;
+    syncCriterionHiddenInput(select);
   }
 
   function onSubjectChange(select) {
     var block = select.closest('.student-block');
-    block.querySelectorAll('select[name^="activity_criterion__"]').forEach(function (sel) {
+    block.querySelectorAll('select.criterion-select').forEach(function (sel) {
       populateCriteriaSelect(sel, select.value);
     });
   }
@@ -163,8 +174,8 @@
     clone.querySelectorAll('textarea').forEach(function (t) { t.value = ''; });
     // 새로 추가되는 활동은 이전 행에서 선택했던 성취기준을 그대로 물려받지
     // 않도록 선택을 비운 상태로 시작한다(의도치 않은 중복 선택 방지).
-    var newCriteriaSelect = clone.querySelector('select[name^="activity_criterion__"]');
-    newCriteriaSelect.selectedIndex = -1;
+    var newCriteriaSelect = clone.querySelector('select.criterion-select');
+    newCriteriaSelect.dataset.selected = '';
     tbody.appendChild(clone);
     var subjectSelect = block.querySelector('select[name^="subject__"]');
     populateCriteriaSelect(newCriteriaSelect, subjectSelect.value);
@@ -215,7 +226,10 @@
       el.name = el.name.slice(0, el.name.lastIndexOf('__')) + '__' + newIndex;
     });
     clone.querySelectorAll('input[type=text], textarea').forEach(function (el) { el.value = ''; });
-    clone.querySelectorAll('select').forEach(function (el) { el.selectedIndex = 0; });
+    clone.querySelectorAll('select:not(.criterion-select)').forEach(function (el) { el.selectedIndex = 0; });
+    // 성취기준 select는 onSubjectChange가 다시 채우므로, 복제 시점에 남아있을
+    // 수 있는 이전 선택 상태만 비워둔다.
+    clone.querySelectorAll('select.criterion-select').forEach(function (el) { el.dataset.selected = ''; });
     var toggleBtn = clone.querySelector('.student-block-title button.row-remove:not(.danger)');
     if (toggleBtn) toggleBtn.textContent = '접기';
     container.appendChild(clone);
@@ -261,16 +275,26 @@
         blockIssues.push('과목이 선택되지 않았습니다.');
       }
 
-      var criteriaSelects = block.querySelectorAll('select[name^="activity_criterion__"]');
+      var criterionHiddens = block.querySelectorAll('input.criterion-hidden');
       var textAreas = block.querySelectorAll('textarea[name^="activity_text__"]');
-      var filledCriteria = [];
-      criteriaSelects.forEach(function (sel, i) {
+      var filledTextCount = 0;
+      var hasEmptyCriteriaRow = false;
+      var allCriteria = [];
+      criterionHiddens.forEach(function (hidden, i) {
         var text = textAreas[i] ? textAreas[i].value.trim() : '';
-        if (text) filledCriteria.push(sel.value);
+        if (!text) return;
+        filledTextCount++;
+        var criteria = hidden.value ? hidden.value.split(',').filter(Boolean) : [];
+        if (criteria.length === 0) {
+          hasEmptyCriteriaRow = true;
+        }
+        allCriteria = allCriteria.concat(criteria);
       });
-      if (filledCriteria.length === 0) {
+      if (filledTextCount === 0) {
         blockIssues.push('활동 관찰 자료가 입력되지 않았습니다.');
-      } else if (new Set(filledCriteria).size !== filledCriteria.length) {
+      } else if (hasEmptyCriteriaRow) {
+        blockIssues.push('각 활동마다 성취기준을 1개 이상 선택해야 합니다.');
+      } else if (new Set(allCriteria).size !== allCriteria.length) {
         blockIssues.push('같은 성취기준을 두 개 이상의 활동에 중복 선택했습니다.');
       }
 
