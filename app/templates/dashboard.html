@@ -152,6 +152,17 @@
     var desiredValues = (hidden.dataset.selected || '').split(',').filter(Boolean);
     var panel = dropdown.querySelector('.criterion-panel');
     panel.innerHTML = '';
+    if (options.length > 0) {
+      var actions = document.createElement('div');
+      actions.className = 'criterion-panel-actions';
+      var clearBtn = document.createElement('button');
+      clearBtn.type = 'button';
+      clearBtn.className = 'criterion-clear-all';
+      clearBtn.textContent = '모두 해제';
+      clearBtn.addEventListener('click', function () { clearCriterionPanel(dropdown); });
+      actions.appendChild(clearBtn);
+      panel.appendChild(actions);
+    }
     options.forEach(function (pair) {
       var label = document.createElement('label');
       label.className = 'criterion-option';
@@ -167,6 +178,13 @@
       panel.appendChild(label);
     });
     delete hidden.dataset.selected;
+    syncCriterionDropdown(dropdown);
+  }
+
+  function clearCriterionPanel(dropdown) {
+    dropdown.querySelectorAll('.criterion-panel input[type="checkbox"]').forEach(function (cb) {
+      cb.checked = false;
+    });
     syncCriterionDropdown(dropdown);
   }
 
