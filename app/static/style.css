@@ -346,6 +346,32 @@ th {
 
 .criterion-option input[type="checkbox"] {
   width: auto;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.criterion-panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 2px 6px 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.criterion-clear-all {
+  margin-top: 0;
+  padding: 2px 8px;
+  font-size: 12px;
+  background: none;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.criterion-clear-all:hover {
+  background: var(--notice-bg);
+  color: var(--text);
 }
 
 .row-remove {
