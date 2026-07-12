@@ -295,6 +295,59 @@ th {
   resize: vertical;
 }
 
+.criterion-dropdown {
+  min-width: 160px;
+}
+
+.criterion-trigger {
+  width: 100%;
+  margin-top: 0;
+  padding: 6px 8px;
+  font-size: 13.5px;
+  text-align: left;
+  background: #fff;
+  color: var(--text);
+  border: 1px solid var(--border);
+  white-space: normal;
+  word-break: break-word;
+}
+
+.criterion-trigger:hover {
+  background: var(--notice-bg);
+}
+
+/* 학생 블록을 감싼 컨테이너가 overflow-x:auto라, 절대 위치로 띄우면
+   가로 스크롤 영역에 잘려 보일 수 있다. 그래서 목록을 셀 안에서 바로
+   펼쳐지는 형태(문서 흐름을 따름)로 둔다. */
+.criterion-panel {
+  margin-top: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  background: #fafbfc;
+}
+
+.criterion-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.criterion-option:hover {
+  background: var(--notice-bg);
+}
+
+.criterion-option input[type="checkbox"] {
+  width: auto;
+}
+
 .row-remove {
   margin-top: 0;
   padding: 4px 8px;

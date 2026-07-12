@@ -72,8 +72,11 @@
                 {% for activity in student.activities %}
                 <tr>
                   <td>
-                    <select multiple size="4" class="criterion-select" data-selected="{{ activity.criteria | join(',') }}" onchange="syncCriterionHiddenInput(this)"></select>
-                    <input type="hidden" name="activity_criterion__{{ student.index }}" class="criterion-hidden" value="{{ activity.criteria | join(',') }}" />
+                    <div class="criterion-dropdown">
+                      <button type="button" class="criterion-trigger" onclick="toggleCriterionPanel(this)">{% if activity.criteria %}{{ activity.criteria | join(', ') }}{% else %}성취기준 선택{% endif %}</button>
+                      <div class="criterion-panel" style="display:none;"></div>
+                    </div>
+                    <input type="hidden" name="activity_criterion__{{ student.index }}" class="criterion-hidden" data-selected="{{ activity.criteria | join(',') }}" value="{{ activity.criteria | join(',') }}" />
                   </td>
                   <td><textarea name="activity_text__{{ student.index }}" required placeholder="활동 관찰 자료">{{ activity.text }}</textarea></td>
                   <td><button type="button" class="danger row-remove" onclick="removeActivityRow(this)">삭제</button></td>
@@ -129,40 +132,62 @@
     }
   })();
 
-  function syncCriterionHiddenInput(select) {
-    // 화면에는 복수 선택 가능한 select를 보여주고, 실제 폼 전송은 같은 행의
-    // hidden input이 담당한다(콤마로 이어붙인 문자열). select 자체를
-    // 제출하면 같은 학생 안의 다른 활동 select와 값이 뒤섞여 어느 활동의
-    // 성취기준인지 구분할 수 없기 때문이다.
-    var hidden = select.parentElement.querySelector('.criterion-hidden');
-    if (!hidden) return;
-    var values = Array.prototype.filter
-      .call(select.options, function (opt) { return opt.selected; })
-      .map(function (opt) { return opt.value; });
+  // 화면에는 드롭박스 버튼 + 체크박스 목록을 보여주고, 실제 폼 전송은 같은
+  // 셀의 hidden input이 담당한다(콤마로 이어붙인 문자열). 체크박스를 그대로
+  // 제출하면 같은 학생 안의 다른 활동의 체크박스 값과 뒤섞여 어느 활동의
+  // 성취기준인지 구분할 수 없기 때문이다.
+
+  function syncCriterionDropdown(dropdown) {
+    var hidden = dropdown.parentElement.querySelector('.criterion-hidden');
+    var checked = dropdown.querySelectorAll('.criterion-panel input[type="checkbox"]:checked');
+    var values = Array.prototype.map.call(checked, function (cb) { return cb.value; });
     hidden.value = values.join(',');
+    var trigger = dropdown.querySelector('.criterion-trigger');
+    trigger.textContent = values.length ? values.join(', ') : '성취기준 선택';
   }
 
-  function populateCriteriaSelect(select, subject) {
+  function renderCriterionPanel(dropdown, subject) {
+    var hidden = dropdown.parentElement.querySelector('.criterion-hidden');
     var options = SUBJECT_CRITERIA[subject] || [];
-    var desiredValues = (select.dataset.selected || '').split(',').filter(Boolean);
-    select.innerHTML = '';
+    var desiredValues = (hidden.dataset.selected || '').split(',').filter(Boolean);
+    var panel = dropdown.querySelector('.criterion-panel');
+    panel.innerHTML = '';
     options.forEach(function (pair) {
-      var opt = document.createElement('option');
-      opt.value = pair[0];
-      opt.textContent = pair[0];
+      var label = document.createElement('label');
+      label.className = 'criterion-option';
+      var checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = pair[0];
       if (desiredValues.indexOf(pair[0]) !== -1) {
-        opt.selected = true;
+        checkbox.checked = true;
       }
-      select.appendChild(opt);
+      checkbox.addEventListener('change', function () { syncCriterionDropdown(dropdown); });
+      label.appendChild(checkbox);
+      label.appendChild(document.createTextNode(' ' + pair[0]));
+      panel.appendChild(label);
     });
-    delete select.dataset.selected;
-    syncCriterionHiddenInput(select);
+    delete hidden.dataset.selected;
+    syncCriterionDropdown(dropdown);
   }
+
+  function toggleCriterionPanel(button) {
+    var panel = button.nextElementSibling;
+    var isOpen = panel.style.display === 'block';
+    document.querySelectorAll('.criterion-panel').forEach(function (p) { p.style.display = 'none'; });
+    panel.style.display = isOpen ? 'none' : 'block';
+  }
+
+  // 드롭다운 바깥을 클릭하면 열려 있던 체크박스 목록을 닫는다.
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.criterion-dropdown')) {
+      document.querySelectorAll('.criterion-panel').forEach(function (p) { p.style.display = 'none'; });
+    }
+  });
 
   function onSubjectChange(select) {
     var block = select.closest('.student-block');
-    block.querySelectorAll('select.criterion-select').forEach(function (sel) {
-      populateCriteriaSelect(sel, select.value);
+    block.querySelectorAll('.criterion-dropdown').forEach(function (dropdown) {
+      renderCriterionPanel(dropdown, select.value);
     });
   }
 
@@ -174,11 +199,13 @@
     clone.querySelectorAll('textarea').forEach(function (t) { t.value = ''; });
     // 새로 추가되는 활동은 이전 행에서 선택했던 성취기준을 그대로 물려받지
     // 않도록 선택을 비운 상태로 시작한다(의도치 않은 중복 선택 방지).
-    var newCriteriaSelect = clone.querySelector('select.criterion-select');
-    newCriteriaSelect.dataset.selected = '';
+    var newHidden = clone.querySelector('.criterion-hidden');
+    newHidden.dataset.selected = '';
+    newHidden.value = '';
+    clone.querySelector('.criterion-panel').style.display = 'none';
     tbody.appendChild(clone);
     var subjectSelect = block.querySelector('select[name^="subject__"]');
-    populateCriteriaSelect(newCriteriaSelect, subjectSelect.value);
+    renderCriterionPanel(clone.querySelector('.criterion-dropdown'), subjectSelect.value);
   }
 
   function removeActivityRow(button) {
@@ -226,10 +253,14 @@
       el.name = el.name.slice(0, el.name.lastIndexOf('__')) + '__' + newIndex;
     });
     clone.querySelectorAll('input[type=text], textarea').forEach(function (el) { el.value = ''; });
-    clone.querySelectorAll('select:not(.criterion-select)').forEach(function (el) { el.selectedIndex = 0; });
-    // 성취기준 select는 onSubjectChange가 다시 채우므로, 복제 시점에 남아있을
-    // 수 있는 이전 선택 상태만 비워둔다.
-    clone.querySelectorAll('select.criterion-select').forEach(function (el) { el.dataset.selected = ''; });
+    clone.querySelectorAll('select').forEach(function (el) { el.selectedIndex = 0; });
+    // 성취기준 체크박스 목록은 onSubjectChange가 다시 채우므로, 복제 시점에
+    // 남아있을 수 있는 이전 선택 상태만 비워둔다.
+    clone.querySelectorAll('.criterion-hidden').forEach(function (el) {
+      el.dataset.selected = '';
+      el.value = '';
+    });
+    clone.querySelectorAll('.criterion-panel').forEach(function (p) { p.style.display = 'none'; });
     var toggleBtn = clone.querySelector('.student-block-title button.row-remove:not(.danger)');
     if (toggleBtn) toggleBtn.textContent = '접기';
     container.appendChild(clone);
