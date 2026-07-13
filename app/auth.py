@@ -35,6 +35,16 @@ async def signup(
             },
         )
 
+    if not valid_subjects:
+        return templates.TemplateResponse(
+            request,
+            "signup.html",
+            {
+                "error": "담당 과목을 1개 이상 선택해 주세요.",
+                "subjects": get_subjects(),
+            },
+        )
+
     client = get_anon_client()
     try:
         result = await run_in_threadpool(client.auth.sign_up, {"email": email, "password": password})

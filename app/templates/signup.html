@@ -9,25 +9,36 @@
     입력하신 자료는 Anthropic(Claude) API로 전송되며, 모델 학습에는 사용되지 않습니다.
   </div>
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
-  <form method="post" action="/signup" onsubmit="this.querySelector('button[type=submit]').disabled = true;">
+  <form method="post" action="/signup">
     <label for="display_name">이름(표시용, 선택)</label>
     <input type="text" id="display_name" name="display_name" />
     <label for="email">이메일</label>
     <input type="email" id="email" name="email" required autofocus />
     <label for="password">비밀번호</label>
     <input type="password" id="password" name="password" required minlength="6" />
-    <label>담당 과목(복수 선택 가능, 나중에 계정 설정에서 변경 가능)</label>
+    <label>담당 과목(1개 이상 선택, 나중에 계정 설정에서 변경 가능)</label>
     <div class="checkbox-list">
       {% for s in subjects %}
       <label class="checkbox-list-item"><input type="checkbox" name="subjects" value="{{ s }}" /> {{ s }}</label>
       {% endfor %}
     </div>
+    <div id="signup-subject-error" class="error" style="display:none;margin-top:8px;">담당 과목을 1개 이상 선택해 주세요.</div>
     <button type="submit">가입 신청</button>
   </form>
   <p class="muted" id="signup-hint" style="display:none;">요청을 처리하는 중입니다. 화면이 바뀔 때까지 다시 누르지 말고 기다려 주세요.</p>
   <script>
-    document.querySelector('form[action="/signup"]').addEventListener('submit', function () {
+    document.querySelector('form[action="/signup"]').addEventListener('submit', function (e) {
+      var checked = document.querySelectorAll('.checkbox-list input[name="subjects"]:checked');
+      var errorBox = document.getElementById('signup-subject-error');
+      if (checked.length === 0) {
+        e.preventDefault();
+        errorBox.style.display = 'block';
+        errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      errorBox.style.display = 'none';
       document.getElementById('signup-hint').style.display = 'block';
+      this.querySelector('button[type=submit]').disabled = true;
     });
   </script>
   <p class="muted" style="margin-top:16px;">
