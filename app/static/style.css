@@ -181,6 +181,20 @@ textarea {
   resize: vertical;
 }
 
+.login-email-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.login-email-row input[type="text"] {
+  flex: 1 1 auto;
+}
+
+.login-email-row select {
+  flex: 1 1 auto;
+}
+
 .checkbox-list {
   display: flex;
   flex-wrap: wrap;
