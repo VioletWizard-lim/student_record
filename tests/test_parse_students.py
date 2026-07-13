@@ -1,6 +1,6 @@
 from starlette.datastructures import FormData
 
-from app.generation import _parse_students, _parse_students_raw
+from app.generation import _parse_students, _parse_students_raw, _teacher_subjects
 
 
 def test_parses_single_student():
@@ -203,3 +203,50 @@ def test_raw_parse_empty_form_returns_single_empty_student():
     assert len(students) == 1
     assert students[0]["index"] == 0
     assert students[0]["student_id"] == ""
+
+
+def test_teacher_subjects_returns_registered_subjects():
+    profile = {"subjects": ["한국사1"]}
+    assert _teacher_subjects(profile) == ["한국사1"]
+
+
+def test_teacher_subjects_falls_back_to_all_when_empty():
+    # 아직 과목을 등록하지 않은 계정(과거 가입자 등)은 전체 과목 목록을 쓴다.
+    profile = {"subjects": []}
+    assert _teacher_subjects(profile) == ["정보", "한국사1"]
+
+
+def test_teacher_subjects_falls_back_when_missing():
+    profile = {}
+    assert _teacher_subjects(profile) == ["정보", "한국사1"]
+
+
+def test_parse_students_rejects_subject_outside_allowed_list():
+    # 교사가 등록하지 않은 과목으로는 생성 요청을 보낼 수 없어야 한다.
+    form = FormData(
+        [
+            ("student_id__0", "10101"),
+            ("subject__0", "한국사1"),
+            ("academic_achievement__0", "A"),
+            ("activity_criterion__0", "10한사1-01-01"),
+            ("activity_text__0", "관찰 내용 1"),
+        ]
+    )
+    students, skipped = _parse_students(form, allowed_subjects=["정보"])
+    assert students == []
+    assert skipped == [{"label": "10101", "reason": "과목이 선택되지 않았습니다."}]
+
+
+def test_parse_students_accepts_subject_within_allowed_list():
+    form = FormData(
+        [
+            ("student_id__0", "10101"),
+            ("subject__0", "한국사1"),
+            ("academic_achievement__0", "A"),
+            ("activity_criterion__0", "10한사1-01-01"),
+            ("activity_text__0", "관찰 내용 1"),
+        ]
+    )
+    students, skipped = _parse_students(form, allowed_subjects=["한국사1"])
+    assert len(students) == 1
+    assert skipped == []

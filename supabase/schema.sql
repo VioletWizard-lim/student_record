@@ -12,9 +12,15 @@ create table if not exists public.profiles (
   display_name text,
   role text not null default 'user' check (role in ('user', 'admin')),
   status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  -- 이 교사가 담당하는 과목 목록(회원가입 또는 계정 설정에서 선택). 비어 있으면
+  -- 앱에서 전체 과목 목록으로 대체해 보여준다(과거 가입자와의 하위 호환).
+  subjects text[] not null default '{}',
   created_at timestamptz not null default now(),
   approved_at timestamptz
 );
+
+-- 기존에 테이블이 이미 있던 배포 환경에서도 안전하게 재실행 가능하도록 추가.
+alter table public.profiles add column if not exists subjects text[] not null default '{}';
 
 alter table public.profiles enable row level security;
 

@@ -172,10 +172,22 @@ def _parse_students_raw(form: FormData) -> list[dict]:
     return students or [_empty_student()]
 
 
-def _parse_students(form: FormData) -> tuple[list[dict], list[dict]]:
+def _teacher_subjects(profile: dict) -> list[str]:
+    """이 교사가 회원가입/계정 설정에서 등록한 과목 목록을 반환한다. 아직 아무
+    과목도 등록하지 않은 계정(과거 가입자 등)은 하위 호환을 위해 전체 과목
+    목록을 대신 사용한다."""
+    subjects = profile.get("subjects") or []
+    return subjects if subjects else get_subjects()
+
+
+def _parse_students(
+    form: FormData, allowed_subjects: list[str] | None = None
+) -> tuple[list[dict], list[dict]]:
     """생성 요청용: 학번/과목/활동이 모두 채워진 학생만 골라, 활동을
     (성취기준, 텍스트) 튜플 리스트로 변환한다. 조건을 만족하지 못해 제외된
-    학생은 이유와 함께 두 번째 값(skipped)으로 따로 반환한다."""
+    학생은 이유와 함께 두 번째 값(skipped)으로 따로 반환한다. allowed_subjects를
+    지정하면(요청한 교사가 등록한 과목) 그 목록에 없는 과목은 거부한다."""
+    allowed = set(allowed_subjects) if allowed_subjects is not None else set(get_subjects())
     students = []
     skipped = []
     for position, raw in enumerate(_parse_students_raw(form), start=1):
@@ -183,7 +195,7 @@ def _parse_students(form: FormData) -> tuple[list[dict], list[dict]]:
         if not raw["student_id"]:
             skipped.append({"label": label, "reason": "학번이 입력되지 않았습니다."})
             continue
-        if raw["subject"] not in get_subjects():
+        if raw["subject"] not in allowed:
             skipped.append({"label": label, "reason": "과목이 선택되지 않았습니다."})
             continue
         activities = [
@@ -260,7 +272,7 @@ def _dashboard_context(
     limit = status["monthly_limit"]
     remaining = None if unlimited else max(limit - used, 0)
     reset_days = days_until_reset(status["period_start"])
-    subjects = get_subjects()
+    subjects = _teacher_subjects(current["profile"])
     subject_criteria_json = json.dumps(
         {subject: get_criteria(subject) for subject in subjects}, ensure_ascii=False
     )
@@ -574,7 +586,7 @@ def _generate_and_record_result(
 async def generate(request: Request, current: CurrentUser = Depends(require_approved)):
     form = await request.form()
     raw_students = _parse_students_raw(form)
-    students, skipped = _parse_students(form)
+    students, skipped = _parse_students(form, _teacher_subjects(current["profile"]))
 
     min_char_raw = form.get("min_char_limit", str(DEFAULT_MIN_CHAR_LIMIT))
     max_char_raw = form.get("max_char_limit", str(DEFAULT_MAX_CHAR_LIMIT))

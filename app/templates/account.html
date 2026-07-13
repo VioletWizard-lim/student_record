@@ -1,6 +1,21 @@
 {% extends "base.html" %}
-{% block title %}계정 삭제 - 생기부 도우미{% endblock %}
+{% block title %}계정 설정 - 생기부 도우미{% endblock %}
 {% block content %}
+
+{% if notice %}<div class="success">{{ notice }}</div>{% endif %}
+
+<div class="card">
+  <h2>담당 과목</h2>
+  <p class="muted">여기서 선택한 과목만 생기부 생성 화면의 "과목" 목록에 나타납니다. 아무 과목도 선택하지 않으면 전체 과목이 표시됩니다.</p>
+  <form method="post" action="/account/subjects">
+    <div class="checkbox-list">
+      {% for s in subjects %}
+      <label class="checkbox-list-item"><input type="checkbox" name="subjects" value="{{ s }}" {% if s in profile.subjects %}checked{% endif %} /> {{ s }}</label>
+      {% endfor %}
+    </div>
+    <button type="submit">과목 저장</button>
+  </form>
+</div>
 
 <div class="card">
   <h2>계정 삭제</h2>
