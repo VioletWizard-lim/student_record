@@ -4,10 +4,15 @@ from starlette.concurrency import run_in_threadpool
 
 from app.deps import CurrentUser, RedirectException, get_current_user, templates
 from app.supabase_client import get_anon_client, get_service_client
-from app.email_domains import is_allowed_education_email
+from app.email_domains import EDUCATION_OFFICE_DOMAINS, is_allowed_education_email
 from app.subject_criteria import get_subjects
 
 router = APIRouter()
+
+# 로그인 화면에서 이메일 도메인을 골라 쓸 수 있게 보여주는 목록. 실제 가입자
+# 이메일 목록은 비인증 상태에서 노출하면 피싱 등에 악용될 수 있어 절대 보여주지
+# 않고, 이미 공개 정보인 교육청 도메인 이름만 후보로 제공한다.
+LOGIN_DOMAINS = sorted(EDUCATION_OFFICE_DOMAINS)
 
 
 @router.get("/signup")
@@ -79,7 +84,7 @@ async def signup(
             return templates.TemplateResponse(
                 request,
                 "login.html",
-                {"message": "이미 가입된 이메일입니다. 로그인해 주세요."},
+                {"message": "이미 가입된 이메일입니다. 로그인해 주세요.", "domains": LOGIN_DOMAINS},
             )
         # 이메일 확인이 필요한 프로젝트 설정인 경우
         return templates.TemplateResponse(
@@ -88,6 +93,7 @@ async def signup(
             {
                 "message": "가입 확인 메일을 발송했습니다. 이메일 인증 후 로그인해 주세요. "
                 "인증 후에도 관리자 승인 전까지는 생성 기능을 사용할 수 없습니다.",
+                "domains": LOGIN_DOMAINS,
             },
         )
 
@@ -97,7 +103,7 @@ async def signup(
 
 @router.get("/login")
 async def login_page(request: Request):
-    return templates.TemplateResponse(request, "login.html", {})
+    return templates.TemplateResponse(request, "login.html", {"domains": LOGIN_DOMAINS})
 
 
 @router.post("/login")
@@ -111,7 +117,7 @@ async def login(request: Request, email: str = Form(...), password: str = Form(.
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"error": "이메일 또는 비밀번호가 올바르지 않습니다."},
+            {"error": "이메일 또는 비밀번호가 올바르지 않습니다.", "domains": LOGIN_DOMAINS},
         )
 
     _set_session(request, result)

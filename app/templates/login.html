@@ -5,15 +5,87 @@
   <h2>로그인</h2>
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
   {% if message %}<div class="notice">{{ message }}</div>{% endif %}
-  <form method="post" action="/login" onsubmit="this.querySelector('button[type=submit]').disabled = true;">
-    <label for="email">이메일</label>
-    <input type="email" id="email" name="email" required autofocus />
+  <form method="post" action="/login">
+    <label for="email_local">이메일</label>
+    <div class="login-email-row" id="login-email-row">
+      <input type="text" id="email_local" placeholder="아이디" autocomplete="username" autofocus />
+      <span class="muted">@</span>
+      <select id="email_domain" onchange="onEmailDomainChange()">
+        {% for d in domains %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+        <option value="__custom__">직접 입력(관리자용)</option>
+      </select>
+    </div>
+    <div id="login-email-custom" style="display:none;">
+      <input type="email" id="email_custom" placeholder="이메일 전체 입력" autocomplete="username" />
+      <button type="button" class="row-add" style="margin-top:6px;" onclick="resetEmailDomain()">학교 이메일 선택으로 돌아가기</button>
+    </div>
+    <div id="login-email-error" class="error" style="display:none;margin-top:8px;">이메일을 입력해 주세요.</div>
+    <input type="hidden" id="email" name="email" />
+
     <label for="password">비밀번호</label>
-    <input type="password" id="password" name="password" required />
+    <input type="password" id="password" name="password" required autocomplete="current-password" />
     <button type="submit">로그인</button>
   </form>
   <p class="muted" style="margin-top:16px;">
     계정이 없으신가요? <a href="/signup">회원가입</a>
   </p>
+  <script>
+    (function () {
+      var STORAGE_KEY = 'login_email_domain';
+      var localInput = document.getElementById('email_local');
+      var domainSelect = document.getElementById('email_domain');
+      var customInput = document.getElementById('email_custom');
+      var hiddenEmail = document.getElementById('email');
+      var emailRow = document.getElementById('login-email-row');
+      var customBox = document.getElementById('login-email-custom');
+      var errorBox = document.getElementById('login-email-error');
+
+      // 서버는 가입자 이메일 목록을 보여주지 않는다(비인증 상태에서 노출되면
+      // 피싱 등에 악용될 수 있음). 대신 이 브라우저에서 마지막으로 선택했던
+      // 도메인만 기억해 두어, 로그인할 때마다 다시 고르지 않아도 되게 한다.
+      var savedDomain = localStorage.getItem(STORAGE_KEY);
+      if (savedDomain) {
+        var hasOption = Array.prototype.some.call(domainSelect.options, function (o) {
+          return o.value === savedDomain;
+        });
+        if (hasOption) domainSelect.value = savedDomain;
+      }
+
+      window.onEmailDomainChange = function () {
+        var isCustom = domainSelect.value === '__custom__';
+        emailRow.style.display = isCustom ? 'none' : 'flex';
+        customBox.style.display = isCustom ? 'block' : 'none';
+        errorBox.style.display = 'none';
+        if (isCustom) {
+          customInput.focus();
+        } else {
+          localInput.focus();
+        }
+      };
+
+      window.resetEmailDomain = function () {
+        domainSelect.value = domainSelect.options[0].value;
+        window.onEmailDomainChange();
+      };
+
+      document.querySelector('form[action="/login"]').addEventListener('submit', function (e) {
+        var isCustom = domainSelect.value === '__custom__';
+        var email = isCustom
+          ? customInput.value.trim()
+          : (localInput.value.trim() ? localInput.value.trim() + '@' + domainSelect.value : '');
+        if (!email) {
+          e.preventDefault();
+          errorBox.style.display = 'block';
+          errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return;
+        }
+        hiddenEmail.value = email;
+        if (!isCustom) {
+          localStorage.setItem(STORAGE_KEY, domainSelect.value);
+        }
+        this.querySelector('button[type=submit]').disabled = true;
+      });
+    })();
+  </script>
 </div>
 {% endblock %}
