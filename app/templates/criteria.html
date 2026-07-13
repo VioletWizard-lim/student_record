@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}성취기준 조회 - 생기부 도우미{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2>성취기준 조회</h2>
+  <p class="muted">과목별 성취기준 코드와 설명을 확인할 수 있습니다.</p>
+  <form method="get" action="/criteria" class="field-row" style="align-items:flex-end; margin-bottom:16px;">
+    <div class="field field-narrow">
+      <label for="subject">과목</label>
+      <select id="subject" name="subject" onchange="this.form.submit()">
+        {% for s in subjects %}
+        <option value="{{ s }}" {% if s == subject %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="q">검색</label>
+      <input type="text" id="q" name="q" value="{{ q }}" placeholder="코드 또는 설명 검색" />
+    </div>
+    <div class="field field-narrow">
+      <button type="submit">검색</button>
+      {% if q %}<a class="btn" href="/criteria?subject={{ subject | urlencode }}">초기화</a>{% endif %}
+    </div>
+  </form>
+
+  {% if not subjects %}
+  <p class="muted">등록된 과목이 없습니다.</p>
+  {% elif criteria %}
+  <table>
+    <thead>
+      <tr>
+        <th style="width:160px;">코드</th>
+        <th>설명</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for code, description in criteria %}
+      <tr>
+        <td class="muted">{{ code }}</td>
+        <td>{{ description }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted" style="margin-top:12px;">총 {{ criteria | length }}개</p>
+  {% elif q %}
+  <p class="muted">검색 조건에 맞는 성취기준이 없습니다.</p>
+  {% else %}
+  <p class="muted">이 과목에 등록된 성취기준이 없습니다.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

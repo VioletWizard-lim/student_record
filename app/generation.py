@@ -443,6 +443,47 @@ async def history_page(
     )
 
 
+def _filter_criteria(criteria: list[tuple[str, str]], query: str) -> list[tuple[str, str]]:
+    """성취기준 코드/설명에 검색어가 포함된 항목만 남긴다 (대소문자 무시)."""
+    query = query.strip()
+    if not query:
+        return criteria
+    needle = query.lower()
+    return [
+        (code, description)
+        for code, description in criteria
+        if needle in code.lower() or needle in description.lower()
+    ]
+
+
+@router.get("/criteria")
+async def criteria_page(
+    request: Request,
+    subject: str = "",
+    q: str = "",
+    current: CurrentUser = Depends(require_approved),
+):
+    subjects = get_subjects()
+    if subject not in subjects:
+        subject = subjects[0] if subjects else ""
+
+    query = q.strip()
+    criteria = _filter_criteria(get_criteria(subject), query) if subject else []
+
+    return templates.TemplateResponse(
+        request,
+        "criteria.html",
+        {
+            "profile": current["profile"],
+            "active_nav": "criteria",
+            "subjects": subjects,
+            "subject": subject,
+            "q": query,
+            "criteria": criteria,
+        },
+    )
+
+
 @router.post("/draft/save")
 async def save_draft(request: Request, current: CurrentUser = Depends(require_approved)):
     form = await request.form()

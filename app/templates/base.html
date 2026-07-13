@@ -19,6 +19,7 @@
         {% if profile.status == "approved" %}
         <a href="/dashboard" class="{% if active_nav == 'dashboard' %}active{% endif %}">생기부 문구 생성</a>
         <a href="/history" class="{% if active_nav == 'history' %}active{% endif %}">생성 이력</a>
+        <a href="/criteria" class="{% if active_nav == 'criteria' %}active{% endif %}">성취기준 조회</a>
         {% endif %}
         {% if profile.role != "admin" %}
         <a href="/account" class="{% if active_nav == 'account' %}active{% endif %}">계정 관리</a>
