@@ -5,13 +5,14 @@ from starlette.concurrency import run_in_threadpool
 from app.deps import CurrentUser, RedirectException, get_current_user, templates
 from app.supabase_client import get_anon_client, get_service_client
 from app.email_domains import is_allowed_education_email
+from app.subject_criteria import get_subjects
 
 router = APIRouter()
 
 
 @router.get("/signup")
 async def signup_page(request: Request):
-    return templates.TemplateResponse(request, "signup.html", {})
+    return templates.TemplateResponse(request, "signup.html", {"subjects": get_subjects()})
 
 
 @router.post("/signup")
@@ -20,13 +21,17 @@ async def signup(
     email: str = Form(...),
     password: str = Form(...),
     display_name: str = Form(""),
+    subjects: list[str] = Form([]),
 ):
+    valid_subjects = [s for s in subjects if s in get_subjects()]
+
     if not is_allowed_education_email(email):
         return templates.TemplateResponse(
             request,
             "signup.html",
             {
                 "error": "가입은 한국 교육청 이메일(예: 인천 @ice.go.kr)로만 가능합니다.",
+                "subjects": get_subjects(),
             },
         )
 
@@ -35,15 +40,22 @@ async def signup(
         result = await run_in_threadpool(client.auth.sign_up, {"email": email, "password": password})
     except Exception as exc:
         return templates.TemplateResponse(
-            request, "signup.html", {"error": f"가입에 실패했습니다: {exc}"}
+            request,
+            "signup.html",
+            {"error": f"가입에 실패했습니다: {exc}", "subjects": get_subjects()},
         )
 
-    if display_name and result.user:
+    profile_update = {}
+    if display_name:
+        profile_update["display_name"] = display_name
+    if valid_subjects:
+        profile_update["subjects"] = valid_subjects
+    if profile_update and result.user:
         try:
             await run_in_threadpool(
                 lambda: get_service_client()
                 .table("profiles")
-                .update({"display_name": display_name})
+                .update(profile_update)
                 .eq("id", result.user.id)
                 .execute()
             )
@@ -114,7 +126,40 @@ async def account_page(request: Request, current: CurrentUser = Depends(get_curr
     if current["profile"]["role"] == "admin":
         return RedirectResponse("/dashboard", status_code=303)
     return templates.TemplateResponse(
-        request, "account.html", {"profile": current["profile"], "active_nav": "account"}
+        request,
+        "account.html",
+        {"profile": current["profile"], "active_nav": "account", "subjects": get_subjects()},
+    )
+
+
+@router.post("/account/subjects")
+async def update_subjects(
+    request: Request,
+    current: CurrentUser = Depends(get_current_user),
+    subjects: list[str] = Form([]),
+):
+    if current["profile"]["role"] == "admin":
+        return RedirectResponse("/dashboard", status_code=303)
+
+    valid_subjects = [s for s in subjects if s in get_subjects()]
+    await run_in_threadpool(
+        lambda: get_service_client()
+        .table("profiles")
+        .update({"subjects": valid_subjects})
+        .eq("id", current["user_id"])
+        .execute()
+    )
+    updated_profile = dict(current["profile"])
+    updated_profile["subjects"] = valid_subjects
+    return templates.TemplateResponse(
+        request,
+        "account.html",
+        {
+            "profile": updated_profile,
+            "active_nav": "account",
+            "subjects": get_subjects(),
+            "notice": "담당 과목이 저장되었습니다.",
+        },
     )
 
 

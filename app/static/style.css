@@ -181,6 +181,26 @@ textarea {
   resize: vertical;
 }
 
+.checkbox-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 4px;
+}
+
+.checkbox-list-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 400;
+  margin-top: 0;
+  cursor: pointer;
+}
+
+.checkbox-list-item input[type="checkbox"] {
+  width: auto;
+}
+
 button, .btn {
   display: inline-block;
   margin-top: 16px;

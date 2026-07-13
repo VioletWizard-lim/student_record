@@ -16,6 +16,12 @@
     <input type="email" id="email" name="email" required autofocus />
     <label for="password">비밀번호</label>
     <input type="password" id="password" name="password" required minlength="6" />
+    <label>담당 과목(복수 선택 가능, 나중에 계정 설정에서 변경 가능)</label>
+    <div class="checkbox-list">
+      {% for s in subjects %}
+      <label class="checkbox-list-item"><input type="checkbox" name="subjects" value="{{ s }}" /> {{ s }}</label>
+      {% endfor %}
+    </div>
     <button type="submit">가입 신청</button>
   </form>
   <p class="muted" id="signup-hint" style="display:none;">요청을 처리하는 중입니다. 화면이 바뀔 때까지 다시 누르지 말고 기다려 주세요.</p>
