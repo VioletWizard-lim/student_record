@@ -12,8 +12,16 @@
   <form method="post" action="/signup">
     <label for="display_name">이름(표시용, 선택)</label>
     <input type="text" id="display_name" name="display_name" />
-    <label for="email">이메일</label>
-    <input type="email" id="email" name="email" required autofocus />
+    <label for="email_local">이메일</label>
+    <div class="email-domain-row">
+      <input type="text" id="email_local" placeholder="아이디" autocomplete="username" autofocus />
+      <span class="muted">@</span>
+      <select id="email_domain">
+        {% for d in domains %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+      </select>
+    </div>
+    <div id="signup-email-error" class="error" style="display:none;margin-top:8px;">이메일을 입력해 주세요.</div>
+    <input type="hidden" id="email" name="email" />
     <label for="password">비밀번호</label>
     <input type="password" id="password" name="password" required minlength="6" />
     <label>담당 과목(1개 이상 선택, 나중에 계정 설정에서 변경 가능)</label>
@@ -28,15 +36,29 @@
   <p class="muted" id="signup-hint" style="display:none;">요청을 처리하는 중입니다. 화면이 바뀔 때까지 다시 누르지 말고 기다려 주세요.</p>
   <script>
     document.querySelector('form[action="/signup"]').addEventListener('submit', function (e) {
-      var checked = document.querySelectorAll('.checkbox-list input[name="subjects"]:checked');
-      var errorBox = document.getElementById('signup-subject-error');
-      if (checked.length === 0) {
+      var localInput = document.getElementById('email_local');
+      var domainSelect = document.getElementById('email_domain');
+      var hiddenEmail = document.getElementById('email');
+      var emailErrorBox = document.getElementById('signup-email-error');
+      var email = localInput.value.trim() ? localInput.value.trim() + '@' + domainSelect.value : '';
+      if (!email) {
         e.preventDefault();
-        errorBox.style.display = 'block';
-        errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        emailErrorBox.style.display = 'block';
+        emailErrorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }
-      errorBox.style.display = 'none';
+      emailErrorBox.style.display = 'none';
+      hiddenEmail.value = email;
+
+      var checked = document.querySelectorAll('.checkbox-list input[name="subjects"]:checked');
+      var subjectErrorBox = document.getElementById('signup-subject-error');
+      if (checked.length === 0) {
+        e.preventDefault();
+        subjectErrorBox.style.display = 'block';
+        subjectErrorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      subjectErrorBox.style.display = 'none';
       document.getElementById('signup-hint').style.display = 'block';
       this.querySelector('button[type=submit]').disabled = true;
     });

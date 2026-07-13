@@ -7,7 +7,7 @@
   {% if message %}<div class="notice">{{ message }}</div>{% endif %}
   <form method="post" action="/login">
     <label for="email_local">이메일</label>
-    <div class="login-email-row" id="login-email-row">
+    <div class="email-domain-row" id="login-email-row">
       <input type="text" id="email_local" placeholder="아이디" autocomplete="username" autofocus />
       <span class="muted">@</span>
       <select id="email_domain" onchange="onEmailDomainChange()">
