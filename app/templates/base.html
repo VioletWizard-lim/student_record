@@ -21,7 +21,7 @@
         <a href="/history" class="{% if active_nav == 'history' %}active{% endif %}">생성 이력</a>
         {% endif %}
         {% if profile.role != "admin" %}
-        <a href="/account" class="{% if active_nav == 'account' %}active{% endif %}">계정 삭제</a>
+        <a href="/account" class="{% if active_nav == 'account' %}active{% endif %}">계정 관리</a>
         {% endif %}
         {% if profile.role == "admin" %}
         <a href="/admin" class="{% if active_nav == 'admin' %}active{% endif %}">관리자 모드</a>
