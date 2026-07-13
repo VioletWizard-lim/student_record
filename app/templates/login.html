@@ -12,7 +12,7 @@
       <span class="muted">@</span>
       <select id="email_domain" onchange="onEmailDomainChange()">
         {% for d in domains %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
-        <option value="__custom__">직접 입력(관리자용)</option>
+        <option value="__custom__">직접 입력</option>
       </select>
     </div>
     <div id="login-email-custom" style="display:none;">
