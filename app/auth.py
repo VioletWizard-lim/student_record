@@ -11,8 +11,12 @@ router = APIRouter()
 
 # 로그인 화면에서 이메일 도메인을 골라 쓸 수 있게 보여주는 목록. 실제 가입자
 # 이메일 목록은 비인증 상태에서 노출하면 피싱 등에 악용될 수 있어 절대 보여주지
-# 않고, 이미 공개 정보인 교육청 도메인 이름만 후보로 제공한다.
-LOGIN_DOMAINS = sorted(EDUCATION_OFFICE_DOMAINS)
+# 않고, 이미 공개 정보인 교육청 도메인 이름만 후보로 제공한다. 실사용자
+# 대부분이 인천(ice.go.kr) 소속이라 그 도메인을 맨 위에 고정해 둔다.
+_PINNED_LOGIN_DOMAIN = "ice.go.kr"
+LOGIN_DOMAINS = [_PINNED_LOGIN_DOMAIN] + sorted(
+    EDUCATION_OFFICE_DOMAINS - {_PINNED_LOGIN_DOMAIN}
+)
 
 
 @router.get("/signup")
