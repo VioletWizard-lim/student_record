@@ -1,6 +1,7 @@
 from starlette.datastructures import FormData
 
 from app.generation import _parse_students, _parse_students_raw, _teacher_subjects
+from app.subject_criteria import get_subjects
 
 
 def test_parses_single_student():
@@ -213,12 +214,12 @@ def test_teacher_subjects_returns_registered_subjects():
 def test_teacher_subjects_falls_back_to_all_when_empty():
     # 아직 과목을 등록하지 않은 계정(과거 가입자 등)은 전체 과목 목록을 쓴다.
     profile = {"subjects": []}
-    assert _teacher_subjects(profile) == ["정보", "한국사1"]
+    assert _teacher_subjects(profile) == get_subjects()
 
 
 def test_teacher_subjects_falls_back_when_missing():
     profile = {}
-    assert _teacher_subjects(profile) == ["정보", "한국사1"]
+    assert _teacher_subjects(profile) == get_subjects()
 
 
 def test_parse_students_rejects_subject_outside_allowed_list():
