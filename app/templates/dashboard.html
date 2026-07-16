@@ -111,8 +111,8 @@
 
     <button type="submit" id="generate-submit-btn" {% if not unlimited and remaining <= 0 %}disabled{% endif %}>일괄 생성하기</button>
     <button type="submit" formaction="/draft/save" formnovalidate class="row-add">임시저장</button>
-    <button type="submit" formaction="/draft/clear" formnovalidate class="danger row-add" onclick="return confirm('입력한 학생 정보를 모두 지우고 새로 시작하시겠습니까? 이 작업은 되돌릴 수 없습니다.');">초기화</button>
     <a href="/dashboard" class="btn row-add" onclick="return confirm('마지막으로 임시저장한 내용을 불러올까요? 지금 화면에서 저장하지 않은 변경 내용은 사라집니다.');">불러오기</a>
+    <button type="submit" formaction="/draft/clear" formnovalidate class="danger row-add" onclick="return confirm('입력한 학생 정보를 모두 지우고 새로 시작하시겠습니까? 이 작업은 되돌릴 수 없습니다.');">초기화</button>
     {% if notice %}<div id="server-notice" class="success" style="margin-top:16px;">{{ notice }}</div>{% endif %}
     {% if error %}<div id="server-error" class="error" style="margin-top:16px;">{{ error }}</div>{% endif %}
   </form>
