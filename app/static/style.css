@@ -7,6 +7,7 @@
   --primary: #2f6fed;
   --primary-dark: #1e4fb8;
   --danger: #d64545;
+  --danger-dark: #b83a3a;
   --danger-bg: #fdecec;
   --notice-bg: #eef4ff;
   --success-bg: #eafaf0;
@@ -424,6 +425,19 @@ th {
 
 .row-add:hover {
   background: var(--notice-bg);
+}
+
+/* .danger가 background만 덮어쓰고 .row-add의 파란 글자/테두리는 그대로
+   남아, 두 클래스를 같이 쓰면 빨간 배경에 파란 글자가 섞여 보이는
+   문제가 있었다. 위험한 동작(초기화 등)임을 나타내면서도 다른 row-add
+   버튼과 여백은 맞추기 위해 별도로 덮어쓴다. */
+.row-add.danger {
+  color: #fff;
+  border-color: var(--danger);
+}
+
+.row-add.danger:hover {
+  background: var(--danger-dark);
 }
 
 .student-block {
