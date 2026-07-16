@@ -24,6 +24,9 @@
     <input type="hidden" id="email" name="email" />
     <label for="password">비밀번호</label>
     <input type="password" id="password" name="password" required minlength="6" />
+    <label for="password_confirm">비밀번호 확인</label>
+    <input type="password" id="password_confirm" name="password_confirm" required minlength="6" />
+    <div id="signup-password-error" class="error" style="display:none;margin-top:8px;">비밀번호가 일치하지 않습니다.</div>
     <label>담당 과목(1개 이상 선택, 나중에 계정 설정에서 변경 가능)</label>
     <div class="checkbox-list">
       {% for s in subjects %}
@@ -49,6 +52,17 @@
       }
       emailErrorBox.style.display = 'none';
       hiddenEmail.value = email;
+
+      var password = document.getElementById('password');
+      var passwordConfirm = document.getElementById('password_confirm');
+      var passwordErrorBox = document.getElementById('signup-password-error');
+      if (password.value !== passwordConfirm.value) {
+        e.preventDefault();
+        passwordErrorBox.style.display = 'block';
+        passwordErrorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      passwordErrorBox.style.display = 'none';
 
       var checked = document.querySelectorAll('.checkbox-list input[name="subjects"]:checked');
       var subjectErrorBox = document.getElementById('signup-subject-error');
