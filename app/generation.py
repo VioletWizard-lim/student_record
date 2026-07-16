@@ -516,9 +516,9 @@ async def save_draft(request: Request, current: CurrentUser = Depends(require_ap
 
 @router.post("/draft/clear")
 async def clear_draft(request: Request, current: CurrentUser = Depends(require_approved)):
-    """학생 입력 폼을 빈 상태로 초기화한다. 저장된 임시저장 내용도 함께
-    지워, 다음에 대시보드를 열었을 때 방금 지운 내용이 다시 불러와지지
-    않게 한다."""
+    """학생 입력 폼을 빈 상태로 초기화한다. 화면만 지우는 "모두 지우기"
+    버튼(클라이언트 전용)과 달리, 저장된 임시저장 내용도 함께 지워서
+    "불러오기"로도 되돌릴 수 없게 한다."""
     client = get_user_client(current["access_token"])
     await run_in_threadpool(
         lambda: client.table("drafts").delete().eq("user_id", current["user_id"]).execute()
