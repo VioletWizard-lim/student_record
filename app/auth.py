@@ -31,6 +31,7 @@ async def signup(
     request: Request,
     email: str = Form(...),
     password: str = Form(...),
+    password_confirm: str = Form(""),
     display_name: str = Form(""),
     subjects: list[str] = Form([]),
 ):
@@ -42,6 +43,17 @@ async def signup(
             "signup.html",
             {
                 "error": "가입은 한국 교육청 이메일(예: 인천 @ice.go.kr)로만 가능합니다.",
+                "subjects": get_subjects(),
+                "domains": EMAIL_DOMAIN_CHOICES,
+            },
+        )
+
+    if password != password_confirm:
+        return templates.TemplateResponse(
+            request,
+            "signup.html",
+            {
+                "error": "비밀번호가 일치하지 않습니다.",
                 "subjects": get_subjects(),
                 "domains": EMAIL_DOMAIN_CHOICES,
             },
