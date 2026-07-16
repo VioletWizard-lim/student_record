@@ -514,6 +514,22 @@ async def save_draft(request: Request, current: CurrentUser = Depends(require_ap
     return templates.TemplateResponse(request, "dashboard.html", context)
 
 
+@router.post("/draft/clear")
+async def clear_draft(request: Request, current: CurrentUser = Depends(require_approved)):
+    """학생 입력 폼을 빈 상태로 초기화한다. 저장된 임시저장 내용도 함께
+    지워, 다음에 대시보드를 열었을 때 방금 지운 내용이 다시 불러와지지
+    않게 한다."""
+    client = get_user_client(current["access_token"])
+    await run_in_threadpool(
+        lambda: client.table("drafts").delete().eq("user_id", current["user_id"]).execute()
+    )
+
+    context = await run_in_threadpool(
+        _dashboard_context, current, notice="입력 내용을 초기화했습니다."
+    )
+    return templates.TemplateResponse(request, "dashboard.html", context)
+
+
 def _generate_and_record_result(
     anthropic_client,
     client,
