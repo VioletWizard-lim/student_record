@@ -7,12 +7,16 @@
   {% if pending %}
   <table>
     <thead>
-      <tr><th>이메일</th><th>이름</th><th>가입일</th><th>처리</th></tr>
+      <tr><th>이메일</th><th>소속 학교/기관</th><th>이름</th><th>가입일</th><th>처리</th></tr>
     </thead>
     <tbody>
       {% for user in pending %}
       <tr>
-        <td>{{ user.email }}</td>
+        <td>
+          {{ user.email }}
+          {% if user.needs_school_check %}<span class="tag" style="background:#fff3cd;color:#8a6300;">⚠️ 소속 확인 필요</span>{% endif %}
+        </td>
+        <td>{{ user.school_name or "-" }}</td>
         <td>{{ user.display_name or "-" }}</td>
         <td class="muted">{{ user.created_at | kst }}</td>
         <td>

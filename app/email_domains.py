@@ -23,17 +23,31 @@ EDUCATION_OFFICE_DOMAINS = {
     "cne.go.kr",  # 충청남도교육청
     "jbe.go.kr",  # 전북특별자치도교육청
     "jne.go.kr",  # 전라남도교육청
-    "gbe.go.kr",  # 경상북도교육청
+    "gbe.kr",  # 경상북도교육청 (다른 교육청과 달리 .go.kr이 아니라 .kr)
     "gne.go.kr",  # 경상남도교육청
     "jje.go.kr",  # 제주특별자치도교육청
 }
 
+# 특정 교육청이 아니라 전국 공무원이 공통으로 쓰는 공직자통합메일 도메인.
+# 이 도메인은 소속 학교/기관을 특정하지 못하므로, 가입은 허용하되 관리자
+# 승인 대기열에서 신청자가 직접 입력한 소속 학교명을 육안으로 대조해
+# 확인하도록 경고 배지를 표시한다.
+GENERIC_GOV_DOMAINS = {"korea.kr"}
 
-def is_allowed_education_email(email: str) -> bool:
+ALLOWED_SIGNUP_DOMAINS = EDUCATION_OFFICE_DOMAINS | GENERIC_GOV_DOMAINS
+
+
+def _domain_matches(email: str, allowed_domains: set[str]) -> bool:
     if "@" not in email:
         return False
     domain = email.rsplit("@", 1)[-1].strip().lower()
-    return any(
-        domain == allowed or domain.endswith("." + allowed)
-        for allowed in EDUCATION_OFFICE_DOMAINS
-    )
+    return any(domain == allowed or domain.endswith("." + allowed) for allowed in allowed_domains)
+
+
+def is_allowed_education_email(email: str) -> bool:
+    return _domain_matches(email, ALLOWED_SIGNUP_DOMAINS)
+
+
+def is_generic_gov_email(email: str) -> bool:
+    """도메인만으로는 소속 학교/기관을 확인할 수 없는 이메일인지 여부."""
+    return _domain_matches(email, GENERIC_GOV_DOMAINS)

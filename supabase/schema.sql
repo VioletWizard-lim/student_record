@@ -15,12 +15,17 @@ create table if not exists public.profiles (
   -- 이 교사가 담당하는 과목 목록(회원가입 또는 계정 설정에서 선택). 비어 있으면
   -- 앱에서 전체 과목 목록으로 대체해 보여준다(과거 가입자와의 하위 호환).
   subjects text[] not null default '{}',
+  -- 회원가입 시 입력하는 소속 학교/기관명. korea.kr처럼 특정 기관을 특정할 수
+  -- 없는 도메인으로 가입한 경우, 관리자가 승인 대기열에서 이 값을 보고
+  -- 소속을 육안으로 대조해 확인하는 용도로 쓴다.
+  school_name text,
   created_at timestamptz not null default now(),
   approved_at timestamptz
 );
 
 -- 기존에 테이블이 이미 있던 배포 환경에서도 안전하게 재실행 가능하도록 추가.
 alter table public.profiles add column if not exists subjects text[] not null default '{}';
+alter table public.profiles add column if not exists school_name text;
 
 alter table public.profiles enable row level security;
 
