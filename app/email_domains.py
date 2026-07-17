@@ -23,7 +23,7 @@ EDUCATION_OFFICE_DOMAINS = {
     "cne.go.kr",  # 충청남도교육청
     "jbe.go.kr",  # 전북특별자치도교육청
     "jne.go.kr",  # 전라남도교육청
-    "gbe.go.kr",  # 경상북도교육청
+    "gbe.kr",  # 경상북도교육청 (다른 교육청과 달리 .go.kr이 아니라 .kr)
     "gne.go.kr",  # 경상남도교육청
     "jje.go.kr",  # 제주특별자치도교육청
 }
