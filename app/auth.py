@@ -4,7 +4,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.deps import CurrentUser, RedirectException, get_current_user, templates
 from app.supabase_client import get_anon_client, get_service_client
-from app.email_domains import EDUCATION_OFFICE_DOMAINS, is_allowed_education_email
+from app.email_domains import EDUCATION_OFFICE_DOMAINS, GENERIC_GOV_DOMAINS, is_allowed_education_email
 from app.subject_criteria import get_subjects
 
 router = APIRouter()
@@ -14,8 +14,10 @@ router = APIRouter()
 # 보여주지 않고, 이미 공개 정보인 교육청 도메인 이름만 후보로 제공한다.
 # 실사용자 대부분이 인천(ice.go.kr) 소속이라 그 도메인을 맨 위에 고정해 둔다.
 _PINNED_EMAIL_DOMAIN = "ice.go.kr"
-EMAIL_DOMAIN_CHOICES = [_PINNED_EMAIL_DOMAIN] + sorted(
-    EDUCATION_OFFICE_DOMAINS - {_PINNED_EMAIL_DOMAIN}
+EMAIL_DOMAIN_CHOICES = (
+    [_PINNED_EMAIL_DOMAIN]
+    + sorted(EDUCATION_OFFICE_DOMAINS - {_PINNED_EMAIL_DOMAIN})
+    + sorted(GENERIC_GOV_DOMAINS)
 )
 
 
@@ -30,19 +32,32 @@ async def signup_page(request: Request):
 async def signup(
     request: Request,
     email: str = Form(...),
+    school_name: str = Form(""),
     password: str = Form(...),
     password_confirm: str = Form(""),
     display_name: str = Form(""),
     subjects: list[str] = Form([]),
 ):
     valid_subjects = [s for s in subjects if s in get_subjects()]
+    school_name = school_name.strip()
 
     if not is_allowed_education_email(email):
         return templates.TemplateResponse(
             request,
             "signup.html",
             {
-                "error": "가입은 한국 교육청 이메일(예: 인천 @ice.go.kr)로만 가능합니다.",
+                "error": "가입은 한국 교육청 이메일(예: 인천 @ice.go.kr) 또는 공직자통합메일(@korea.kr)로만 가능합니다.",
+                "subjects": get_subjects(),
+                "domains": EMAIL_DOMAIN_CHOICES,
+            },
+        )
+
+    if not school_name:
+        return templates.TemplateResponse(
+            request,
+            "signup.html",
+            {
+                "error": "소속 학교/기관명을 입력해 주세요.",
                 "subjects": get_subjects(),
                 "domains": EMAIL_DOMAIN_CHOICES,
             },
@@ -84,7 +99,7 @@ async def signup(
             },
         )
 
-    profile_update = {}
+    profile_update = {"school_name": school_name}
     if display_name:
         profile_update["display_name"] = display_name
     if valid_subjects:

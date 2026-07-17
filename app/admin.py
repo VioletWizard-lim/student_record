@@ -5,6 +5,7 @@ from fastapi.responses import RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
 from app.deps import CurrentUser, require_admin, templates
+from app.email_domains import is_generic_gov_email
 from app.supabase_client import get_service_client
 from app.usage import days_until_reset, ledger_status, set_monthly_limit
 from app.config import settings
@@ -25,6 +26,10 @@ def _admin_home_context(current: CurrentUser) -> dict:
         .execute()
         .data
     )
+    # korea.kr처럼 도메인만으로 소속 기관을 특정할 수 없는 경우, 관리자가
+    # 신청자가 직접 입력한 소속 학교명을 육안으로 대조해야 하므로 표시해 둔다.
+    for row in pending:
+        row["needs_school_check"] = is_generic_gov_email(row["email"])
 
     users = (
         service.table("profiles")

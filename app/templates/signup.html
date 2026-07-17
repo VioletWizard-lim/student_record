@@ -4,7 +4,7 @@
 <div class="card" style="max-width:420px;margin:40px auto;">
   <h2>회원가입</h2>
   <div class="notice">
-    가입은 한국 교육청 이메일(예: 인천 @ice.go.kr)로만 가능합니다.
+    가입은 한국 교육청 이메일(예: 인천 @ice.go.kr) 또는 공직자통합메일(@korea.kr)로만 가능합니다.
     가입 즉시 이용은 불가하며, 관리자 승인 후 생성 기능을 사용할 수 있습니다.
     입력하신 자료는 Anthropic(Claude) API로 전송되며, 모델 학습에는 사용되지 않습니다.
   </div>
@@ -22,6 +22,8 @@
     </div>
     <div id="signup-email-error" class="error" style="display:none;margin-top:8px;">이메일을 입력해 주세요.</div>
     <input type="hidden" id="email" name="email" />
+    <label for="school_name">소속 학교/기관명</label>
+    <input type="text" id="school_name" name="school_name" required placeholder="예: OO고등학교" />
     <label for="password">비밀번호</label>
     <input type="password" id="password" name="password" required minlength="6" />
     <label for="password_confirm">비밀번호 확인</label>

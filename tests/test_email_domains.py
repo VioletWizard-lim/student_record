@@ -1,4 +1,4 @@
-from app.email_domains import is_allowed_education_email
+from app.email_domains import is_allowed_education_email, is_generic_gov_email
 
 
 def test_allows_bare_office_domain():
@@ -33,3 +33,15 @@ def test_allows_gyeongbuk_dot_kr_domain():
 
 def test_rejects_incorrect_gyeongbuk_go_kr_domain():
     assert not is_allowed_education_email("teacher@gbe.go.kr")
+
+
+def test_allows_korea_dot_kr_gov_domain():
+    assert is_allowed_education_email("civil.servant@korea.kr")
+
+
+def test_is_generic_gov_email_flags_korea_dot_kr():
+    assert is_generic_gov_email("civil.servant@korea.kr")
+
+
+def test_is_generic_gov_email_does_not_flag_education_office_domain():
+    assert not is_generic_gov_email("teacher@ice.go.kr")
