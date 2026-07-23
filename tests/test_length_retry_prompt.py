@@ -1,4 +1,9 @@
-from app.generation import HARD_MAX_CHAR_LIMIT, _build_length_retry_prompt, _is_length_acceptable
+from app.generation import (
+    HARD_MAX_CHAR_LIMIT,
+    _build_adjust_user_prompt,
+    _build_length_retry_prompt,
+    _is_length_acceptable,
+)
 
 
 def test_retry_prompt_asks_to_shorten_when_over_max():
@@ -49,3 +54,15 @@ def test_length_tolerance_upper_bound_clamped_to_hard_limit():
         _is_length_acceptable(HARD_MAX_CHAR_LIMIT + 50, min_char_limit=1, max_char_limit=max_char_limit)
         is False
     )
+
+
+def test_adjust_prompt_includes_original_text_and_target_range():
+    prompt = _build_adjust_user_prompt("학생이 열심히 노력함.", min_char_limit=600, max_char_limit=700)
+    assert "학생이 열심히 노력함." in prompt
+    assert "600~700바이트" in prompt
+
+
+def test_adjust_prompt_reports_current_byte_count():
+    # "가"(한글 1자, 나이스 바이트 기준 3바이트) * 2 = 6바이트
+    prompt = _build_adjust_user_prompt("가가", min_char_limit=100, max_char_limit=200)
+    assert "6바이트" in prompt
