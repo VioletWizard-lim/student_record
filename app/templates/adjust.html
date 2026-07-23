@@ -60,11 +60,30 @@
     }
   })();
 
+  // 다듬기 요청이 진행 중일 때 다른 페이지로 이동하려 하면(사이드바 메뉴 클릭,
+  // 탭 닫기, 새로고침 등) 진행 중인 요청을 잃는다는 경고를 띄운다. 제출 버튼을
+  // 누른 그 순간의 네비게이션(폼 제출 자체)에는 뜨지 않도록, 제출 시점에만
+  // 아주 짧게 경고를 눌러둔다(브라우저가 폼 제출 네비게이션을 처리하는 동안).
+  var isAdjusting = false;
+  var suppressOwnSubmit = false;
+
+  window.addEventListener('beforeunload', function (e) {
+    if (isAdjusting && !suppressOwnSubmit) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+
   document.querySelector('form[action="/adjust"]').addEventListener('submit', function () {
     var btn = document.getElementById('adjust-submit-btn');
     if (!btn || btn.disabled) return;
     btn.disabled = true;
     btn.textContent = '다듬는 중입니다...';
+    isAdjusting = true;
+    suppressOwnSubmit = true;
+    setTimeout(function () {
+      suppressOwnSubmit = false;
+    }, 0);
   });
 </script>
 

@@ -107,7 +107,9 @@ create policy "usage_ledger_no_client_access" on public.usage_ledger
   for all using (false);
 
 -- ---------------------------------------------------------------------------
--- drafts: 생성 폼의 임시저장 데이터. 사용자당 최대 1건만 보관한다(덮어쓰기).
+-- drafts: 생성 폼의 임시저장 데이터 + 글자수 다듬기 화면의 마지막 목표
+-- 바이트 범위(adjust_min_char_limit/adjust_max_char_limit)를 함께 보관한다.
+-- 사용자당 최대 1건만 보관한다(덮어쓰기).
 -- ---------------------------------------------------------------------------
 create table if not exists public.drafts (
   user_id uuid primary key references public.profiles (id) on delete cascade,

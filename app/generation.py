@@ -558,6 +558,21 @@ async def clear_draft(request: Request, current: CurrentUser = Depends(require_a
     return templates.TemplateResponse(request, "dashboard.html", context)
 
 
+def _save_adjust_char_limits(current: CurrentUser, min_char_limit: int, max_char_limit: int) -> None:
+    """글자수 다듬기에서 마지막으로 사용한 목표 바이트 범위를 drafts 테이블에
+    저장해, 다음에 이 화면을 열었을 때도 매번 기본값(600~700)으로 되돌아가지
+    않고 그대로 유지되게 한다. 대시보드 임시저장과 같은 행(user_id 1건)을
+    공유하므로, 기존에 저장된 다른 키(students 등)는 건드리지 않는다."""
+    draft = _load_draft(current) or {}
+    draft["adjust_min_char_limit"] = min_char_limit
+    draft["adjust_max_char_limit"] = max_char_limit
+    client = get_user_client(current["access_token"])
+    try:
+        client.table("drafts").upsert({"user_id": current["user_id"], "data": draft}).execute()
+    except Exception:
+        pass
+
+
 def _adjust_context(
     current: CurrentUser,
     error: str | None = None,
@@ -572,6 +587,14 @@ def _adjust_context(
     limit = status["monthly_limit"]
     remaining = None if unlimited else max(limit - used, 0)
     reset_days = days_until_reset(status["period_start"])
+
+    if min_char_limit is None or max_char_limit is None:
+        draft = _load_draft(current) or {}
+        if min_char_limit is None:
+            min_char_limit = draft.get("adjust_min_char_limit") or DEFAULT_MIN_CHAR_LIMIT
+        if max_char_limit is None:
+            max_char_limit = draft.get("adjust_max_char_limit") or DEFAULT_MAX_CHAR_LIMIT
+
     return {
         "profile": current["profile"],
         "active_nav": "adjust",
@@ -582,8 +605,8 @@ def _adjust_context(
         "reset_days": reset_days,
         "hard_max_char_limit": HARD_MAX_CHAR_LIMIT,
         "input_text": input_text,
-        "min_char_limit": min_char_limit if min_char_limit is not None else DEFAULT_MIN_CHAR_LIMIT,
-        "max_char_limit": max_char_limit if max_char_limit is not None else DEFAULT_MAX_CHAR_LIMIT,
+        "min_char_limit": min_char_limit,
+        "max_char_limit": max_char_limit,
         "error": error,
         "result": result,
     }
@@ -629,6 +652,7 @@ async def adjust_length(
         )
         return templates.TemplateResponse(request, "adjust.html", context)
     min_char_limit_value, max_char_limit_value = char_limits
+    await run_in_threadpool(_save_adjust_char_limits, current, min_char_limit_value, max_char_limit_value)
 
     if contains_rrn(input_text):
         context = await run_in_threadpool(
