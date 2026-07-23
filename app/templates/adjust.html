@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}글자수 다듬기 - 생기부 도우미{% endblock %}
+{% block content %}
+
+<div class="notice">
+  <strong>개인정보 처리 안내</strong><br />
+  이미 작성된 생기부 문구를 붙여넣어 목표 바이트에 맞게 다듬습니다.
+  주민등록번호, 가족관계, 건강정보, 심리상담 내용 등 민감정보는 입력하지 않도록 주의해 주세요
+  (주민등록번호 패턴은 자동으로 차단됩니다).
+  입력된 자료는 Anthropic(Claude) API로 전송되어 다듬기에만 사용되며, 모델 학습에는 사용되지 않습니다.
+  이 기능도 생기부 문구 생성과 같은 월별 사용 한도를 함께 사용합니다.
+</div>
+
+<div class="usage-widget">
+  {% if unlimited %}
+  <div><strong>관리자 — 사용 한도 없음</strong></div>
+  {% else %}
+  <div><strong>{{ used }}/{{ limit }}</strong>건 사용</div>
+  <div class="muted">다음 리셋일: D-{{ reset_days }}</div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>글자수 다듬기</h2>
+  <p class="muted">이미 작성해 둔 생기부 문구를 붙여넣으면, 내용과 문체는 최대한 유지하면서 목표 바이트 범위에 맞게 분량만 다시 다듬어 드립니다.</p>
+  <form method="post" action="/adjust">
+    <label for="input_text">다듬을 문구</label>
+    <textarea id="input_text" name="input_text" required placeholder="다듬고 싶은 생기부 문구를 붙여넣어 주세요.">{{ input_text }}</textarea>
+
+    <div class="field-row">
+      <div class="field field-narrow">
+        <label for="min_char_limit">목표 바이트 (최소)</label>
+        <input type="number" id="min_char_limit" name="min_char_limit" min="1" max="{{ hard_max_char_limit }}" value="{{ min_char_limit }}" />
+      </div>
+      <div class="field field-narrow">
+        <label for="max_char_limit">목표 바이트 (최대)</label>
+        <input type="number" id="max_char_limit" name="max_char_limit" min="1" max="{{ hard_max_char_limit }}" value="{{ max_char_limit }}" />
+      </div>
+    </div>
+    <p class="muted">목표 바이트는 나이스 바이트 계산 기준(공백 포함)이며, 최대 바이트는 {{ hard_max_char_limit }}바이트를 넘을 수 없습니다.</p>
+
+    <button type="submit" id="adjust-submit-btn" {% if not unlimited and remaining is not none and remaining <= 0 %}disabled{% endif %}>다듬기</button>
+    {% if error %}<div id="server-error" class="error" style="margin-top:16px;">{{ error }}</div>{% endif %}
+  </form>
+</div>
+
+{% if result %}
+<div class="card">
+  <h3>다듬은 결과</h3>
+  <div class="result-box">{{ result.text }}</div>
+  <p class="muted">바이트: <strong>{{ result.count }}</strong> / {{ result.min_char_limit }}~{{ result.max_char_limit }}바이트</p>
+</div>
+{% endif %}
+
+<script>
+  (function () {
+    var target = document.getElementById('server-error');
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  })();
+
+  document.querySelector('form[action="/adjust"]').addEventListener('submit', function () {
+    var btn = document.getElementById('adjust-submit-btn');
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = '다듬는 중입니다...';
+  });
+</script>
+
+<div class="donation">
+  본 서비스는 결제 없이 운영됩니다.
+</div>
+
+{% endblock %}
