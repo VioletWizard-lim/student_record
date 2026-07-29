@@ -735,13 +735,17 @@ async def adjust_length(
         }
 
     run_result = await run_in_threadpool(_run)
+    succeeded = "error" not in run_result
 
     context = await run_in_threadpool(
         _adjust_context,
         current,
         error=run_result.get("error"),
-        result=None if "error" in run_result else run_result,
-        input_text=input_text,
+        result=run_result if succeeded else None,
+        # 성공하면 "다듬을 문구" 입력란을 비워, 결과가 나왔다는 것을 한눈에 알 수
+        # 있게 하고 바로 다음 문구를 붙여넣을 수 있게 한다. 실패했을 때는 다시
+        # 입력할 필요 없이 그대로 남겨 둔다.
+        input_text="" if succeeded else input_text,
         min_char_limit=min_char_limit_value,
         max_char_limit=max_char_limit_value,
     )
