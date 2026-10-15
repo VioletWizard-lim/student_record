@@ -70,7 +70,7 @@ fly secrets set \
   SESSION_SECRET=...
 ```
 
-`fly secrets set`으로 등록한 값은 Fly.io 서버에 암호화되어 저장되며, 이후 배포(`fly deploy` 또는 GitHub Actions)에서 계속 유지되므로 매번 다시 등록할 필요가 없습니다. `fly.toml`은 `primary_region = "nrt"`(도쿄), 헬스체크 경로 `/healthz`가 이미 설정되어 있습니다. 앱 이름이 이미 사용 중이면 `fly.toml`의 `app` 값을 원하는 이름으로 변경하세요. `min_machines_running = 1`로 설정되어 있어 트래픽이 없어도 머신 1대가 항상 켜져 있습니다(콜드 스타트로 인한 첫 로딩 지연 방지). 비용을 아끼고 싶다면 `0`으로 바꿀 수 있지만, 그러면 한동안 접속이 없다가 처음 들어오는 사용자는 머신이 재부팅되는 동안(수 초) 로딩이 느려집니다.
+`fly secrets set`으로 등록한 값은 Fly.io 서버에 암호화되어 저장되며, 이후 배포(`fly deploy` 또는 GitHub Actions)에서 계속 유지되므로 매번 다시 등록할 필요가 없습니다. `fly.toml`은 `primary_region = "nrt"`(도쿄), 헬스체크 경로 `/healthz`가 이미 설정되어 있습니다. 앱 이름이 이미 사용 중이면 `fly.toml`의 `app` 값을 원하는 이름으로 변경하세요. `min_machines_running = 0`으로 설정되어 있어 트래픽이 없으면 머신이 자동으로 꺼지므로, 사용하지 않는 기간에는 Fly.io 비용이 거의 발생하지 않습니다. 대신 한동안 접속이 없다가 처음 들어오는 사용자는 머신이 켜지는 동안(수 초) 로딩이 느려집니다. 콜드 스타트를 없애고 싶다면 `1`로 바꿔 머신 1대를 항상 켜둘 수 있지만, 그만큼 비용이 상시 발생합니다.
 
 ### GitHub Actions 자동 배포
 
