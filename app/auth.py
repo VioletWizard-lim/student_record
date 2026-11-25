@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from starlette.concurrency import run_in_threadpool
@@ -6,6 +8,13 @@ from app.deps import CurrentUser, RedirectException, get_current_user, templates
 from app.supabase_client import get_anon_client, get_service_client
 from app.email_domains import EDUCATION_OFFICE_DOMAINS, GENERIC_GOV_DOMAINS, is_allowed_education_email
 from app.subject_criteria import get_subjects
+
+try:
+    from supabase_auth.errors import AuthApiError
+except ImportError:  # 예전 패키지 이름
+    from gotrue.errors import AuthApiError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -90,11 +99,18 @@ async def signup(
     try:
         result = await run_in_threadpool(client.auth.sign_up, {"email": email, "password": password})
     except Exception as exc:
+        # Supabase가 사용자에게 알려 주는 오류(비밀번호 규칙 등)만 그대로 보여 주고,
+        # 그 밖의 오류(연결 실패 등)는 서버 주소·내부 정보가 섞일 수 있어 로그에만 남긴다
+        if isinstance(exc, AuthApiError):
+            reason = str(exc)
+        else:
+            logger.exception("회원가입 처리 오류")
+            reason = "잠시 후 다시 시도해 주세요."
         return templates.TemplateResponse(
             request,
             "signup.html",
             {
-                "error": f"가입에 실패했습니다: {exc}",
+                "error": f"가입에 실패했습니다: {reason}",
                 "subjects": get_subjects(),
                 "domains": EMAIL_DOMAIN_CHOICES,
             },
