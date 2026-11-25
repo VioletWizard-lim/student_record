@@ -42,7 +42,7 @@ cp .env.example .env
 | `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` | Supabase 프로젝트 설정값 |
 | `ANTHROPIC_API_KEY` | 본 프로젝트 전용으로 발급한 Anthropic API 키 (관리자 개인 키 1개, 타 프로젝트와 공유 금지) |
 | `ANTHROPIC_MODEL` | 기본 `claude-sonnet-5`, 필요 시 Opus/Haiku로 전환 |
-| `SESSION_SECRET` | 세션 쿠키 서명용 임의의 긴 문자열 |
+| `SESSION_SECRET` | 세션 쿠키 서명용 임의의 긴 문자열 (32자 이상, 운영에서 짧거나 예시 값이면 서버가 켜지지 않음) |
 | `MONTHLY_LIMIT` / `ROLLING_WINDOW_DAYS` | 사용량 한도 정책 (기본 30일당 200건) |
 
 **비용 안전장치**: [Anthropic 콘솔](https://console.anthropic.com)에서 Spending Limit을 월 15만원으로 설정해 두세요. 이 값은 코드가 아닌 Anthropic 콘솔에서 직접 설정합니다.
